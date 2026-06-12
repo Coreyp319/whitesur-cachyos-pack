@@ -25,13 +25,18 @@ kwriteconfig6 --file kdeglobals --group Icons --key Theme WhiteSur-dark-refined
 "$HOME/.local/bin/$NAME" 2>/dev/null || true
 kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
 
-# Optional: the Kvantum whitespace fork — installed but NOT auto-selected
-# (it helps classic Qt config dialogs; opt in if you want it).
+# Optional: the Kvantum whitespace fork — light + dark variants installed but
+# NOT auto-selected. The icon watcher above will ride them on light↔dark if you
+# opt in by selecting WhiteSurRefined; it then auto-swaps to WhiteSurRefinedDark
+# in dark mode (and back), so both must be present.
 if [ -d "$HERE/kvantum/WhiteSurRefined" ]; then
   mkdir -p "$HOME/.config/Kvantum"
-  cp -r "$HERE/kvantum/WhiteSurRefined" "$HOME/.config/Kvantum/"
-  echo ":: Kvantum whitespace fork 'WhiteSurRefined' installed (NOT selected)."
+  for kv in "$HERE"/kvantum/WhiteSurRefined*; do
+    [ -d "$kv" ] && cp -r "$kv" "$HOME/.config/Kvantum/"
+  done
+  echo ":: Kvantum whitespace fork installed (light + dark, NOT selected)."
   echo "   To enable it:  kwriteconfig6 --file ~/.config/Kvantum/kvantum.kvconfig --group General --key theme WhiteSurRefined"
+  echo "   (the icon watcher then swaps to WhiteSurRefinedDark automatically in dark mode)"
 fi
 
 echo ":: Done — refined System Settings icons are live and theme-aware (re-bake on light↔dark)."

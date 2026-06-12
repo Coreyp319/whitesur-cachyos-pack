@@ -21,11 +21,15 @@ kwriteconfig6 --file kdeglobals --group Icons --key Theme "$stock"
 
 echo "3/4 Un-selecting the Kvantum whitespace fork if active…"
 cur=$(kreadconfig6 --file "$HOME/.config/Kvantum/kvantum.kvconfig" --group General --key theme 2>/dev/null || echo "")
-[ "$cur" = "WhiteSurRefined" ] && kwriteconfig6 --file "$HOME/.config/Kvantum/kvantum.kvconfig" --group General --key theme WhiteSur
+case "$cur" in
+  WhiteSurRefinedDark) kwriteconfig6 --file "$HOME/.config/Kvantum/kvantum.kvconfig" --group General --key theme WhiteSurDark ;;
+  WhiteSurRefined)     kwriteconfig6 --file "$HOME/.config/Kvantum/kvantum.kvconfig" --group General --key theme WhiteSur ;;
+esac
 
 if [ "${1:-}" = "--purge" ]; then
   echo "4/4 Purging installed refine files…"
   rm -rf "$HOME/.config/Kvantum/WhiteSurRefined" \
+         "$HOME/.config/Kvantum/WhiteSurRefinedDark" \
          "$HOME/.local/share/icons/WhiteSur-dark-refined" \
          "$HOME/.local/bin/$NAME"
 else

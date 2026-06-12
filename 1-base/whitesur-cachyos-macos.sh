@@ -205,6 +205,10 @@ kwriteconfig6 --file kwinrc --group Plugins --key glideEnabled false
 kwriteconfig6 --file kwinrc --group Plugins --key fallapartEnabled false
 kwriteconfig6 --file kwinrc --group Effect-scale --key InScale 0.90
 kwriteconfig6 --file kwinrc --group Effect-scale --key OutScale 0.90
+# Motion language: ~0.9 duration factor gives smooth, deliberate window
+# scale/fade (~225ms) that matches the Spotlight/KRunner 220ms OutCubic feel,
+# rather than the near-instant 0.25 some CachyOS profiles ship.
+kwriteconfig6 --file kdeglobals --group KDE --key AnimationDurationFactor 0.9
 ok "KWin configured"
 
 # ---------------------------------------------------------------------------
@@ -311,6 +315,10 @@ else
 fi
 kwriteconfig6 --file "$HOME/.config/Kvantum/kvantum.kvconfig" --group General --key theme "$KV"
 kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage "$LNF"
+# Wallpaper: light vs dark Big Sur (best-effort — only if the image exists).
+if [ "$MODE" = dark ]; then WALLDIR=WhiteSur-dark; else WALLDIR=WhiteSur-light; fi
+WALL=$(ls "$HOME/.local/share/wallpapers/$WALLDIR"/contents/images/*.jpg 2>/dev/null | head -1)
+[ -n "${WALL:-}" ] && plasma-apply-wallpaperimage "$WALL" >/dev/null 2>&1
 for v in gtk-3.0 gtk-4.0; do
   kwriteconfig6 --file "$v/settings.ini" --group Settings --key gtk-theme-name "$GTK"
   kwriteconfig6 --file "$v/settings.ini" --group Settings --key gtk-application-prefer-dark-theme "$PREFERDARK"

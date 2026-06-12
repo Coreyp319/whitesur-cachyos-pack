@@ -23,11 +23,29 @@ fi
 [ -z "${rgb:-}" ] && rgb="36,36,36"
 HEX=$(printf '#%02x%02x%02x' "${rgb%%,*}" "$(echo "$rgb"|cut -d, -f2)" "${rgb##*,}")
 
+# Light vs dark (text color is dark on a light scheme, light on a dark scheme) ->
+# pick the matching refined Kvantum whitespace theme so it rides the toggle too.
+r=${rgb%%,*}; b=${rgb##*,}; sum=$(( r + b ))
+# Same light/dark verdict also picks the inherit ORDER: a refined theme that
+# inherits the matching WhiteSur set FIRST, so non-overridden symbolic/action
+# icons across the desktop track the active scheme (and don't wash out in light
+# mode by falling through to the dark glyph set).
+if [ "$sum" -lt 320 ]; then
+  KV_TARGET="WhiteSurRefined"
+  INHERITS="WhiteSur-light,WhiteSur-dark,breeze,hicolor"
+else
+  KV_TARGET="WhiteSurRefinedDark"
+  INHERITS="WhiteSur-dark,WhiteSur-light,breeze-dark,hicolor"
+fi
+KV_FILE="$HOME/.config/Kvantum/kvantum.kvconfig"
+cur_kv=$(kreadconfig6 --file "$KV_FILE" --group General --key theme 2>/dev/null || echo "")
+
 cur_theme=$(kreadconfig6 --file kdeglobals --group Icons --key Theme 2>/dev/null || echo "")
 last=$(cat "$MARK" 2>/dev/null || echo "")
 
 # Fast path: nothing to do -> exit without writing anything (prevents watcher loop).
-if [ "$last" = "$HEX" ] && [ -d "$DST/apps/scalable" ] && [ "$cur_theme" = "$THEME_NAME" ]; then
+if [ "$last" = "$HEX" ] && [ -d "$DST/apps/scalable" ] && [ "$cur_theme" = "$THEME_NAME" ] \
+   && { [ "$cur_kv" = "$KV_TARGET" ] || [ ! -d "$HOME/.config/Kvantum/$KV_TARGET" ]; }; then
   exit 0
 fi
 
@@ -37,7 +55,7 @@ cat > "$DST/index.theme" <<EOF
 [Icon Theme]
 Name=WhiteSur Dark Refined
 Comment=WhiteSur with uniform monochrome System Settings section icons (tone tracks active scheme)
-Inherits=WhiteSur-dark,WhiteSur-light,breeze-dark,hicolor
+Inherits=$INHERITS
 Directories=apps/scalable
 
 [apps/scalable]
@@ -91,5 +109,10 @@ gtk-update-icon-cache -q -f "$DST" 2>/dev/null || true
 if [ "$cur_theme" != "$THEME_NAME" ]; then
   kwriteconfig6 --file kdeglobals --group Icons --key Theme "$THEME_NAME"
 fi
+# Select the matching refined Kvantum whitespace theme (kvantum.kvconfig is NOT watched,
+# so this never re-triggers the watcher). Only if it exists and differs.
+if [ "$cur_kv" != "$KV_TARGET" ] && [ -d "$HOME/.config/Kvantum/$KV_TARGET" ]; then
+  kwriteconfig6 --file "$KV_FILE" --group General --key theme "$KV_TARGET"
+fi
 kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
-echo "cocovox-refine-icons: tone $HEX (scheme $scheme)"
+echo "cocovox-refine-icons: tone $HEX, kvantum $KV_TARGET (scheme $scheme)"
