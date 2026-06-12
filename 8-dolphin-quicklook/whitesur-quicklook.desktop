@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=all/allfiles;
+Actions=quickLook;
+X-KDE-Priority=TopLevel
+
+[Desktop Action quickLook]
+Name=Quick Look (Space)
+Icon=quickview
+Exec=kiview -s %f

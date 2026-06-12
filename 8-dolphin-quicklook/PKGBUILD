@@ -1,0 +1,37 @@
+# Builds kiview from the upstream git master branch.
+#
+# Why not the AUR `kiview` (v1.1): that tagged release only supports its
+# "find the active Dolphin window and grab the selection over D-Bus" mode,
+# which toggles your selection and throws errors when launched from a service
+# menu. master adds a direct `kiview -s <file>` mode that previews a path with
+# no D-Bus/selection dance — which is exactly how this layer invokes it.
+pkgname=kiview-git
+pkgver=r0
+pkgrel=1
+pkgdesc="Quick file preview for Dolphin (git master — adds direct file-path preview)"
+arch=('x86_64')
+url="https://github.com/Nyre221/kiview"
+license=('GPL-3.0-or-later')
+depends=('kcoreaddons' 'ki18n' 'kirigami' 'qt6-multimedia' 'qt6-webengine')
+makedepends=('git' 'cmake' 'extra-cmake-modules')
+provides=('kiview')
+conflicts=('kiview')
+source=("git+https://github.com/Nyre221/kiview.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/kiview"
+  printf "r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cmake -B build -S "$srcdir/kiview" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_LIBDIR=lib
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+}
