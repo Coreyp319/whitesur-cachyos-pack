@@ -112,6 +112,28 @@ msg "Installing Plasma theme, icons, cursors…"
 ( cd "$BUILD/WhiteSur-icon-theme" && ./install.sh >/dev/null 2>&1 ) && ok "WhiteSur icons"
 ( cd "$BUILD/WhiteSur-cursors"    && ./install.sh >/dev/null 2>&1 ) && ok "WhiteSur cursors"
 
+# Text-hierarchy calibration: the upstream schemes carry leftover Breeze values,
+# so accent/link text is one blue in views but a different cyan in dialogs/buttons,
+# and dark secondary text shifts shade on buttons/tooltips. Unify every surface to
+# a single accent (49,91,239) and one secondary tier (light 142 on light bg / 160
+# on the dark Tooltip+Complementary surfaces; 160 throughout in dark). Primary text
+# is untouched (the refine-icon tone keys off ForegroundNormal).
+CS="$HOME/.local/share/color-schemes"
+calib_group(){ # $1=file $2=group $3=inactive
+  kwriteconfig6 --file "$1" --group "$2" --key ForegroundActive   "49,91,239"
+  kwriteconfig6 --file "$1" --group "$2" --key ForegroundLink     "49,91,239"
+  kwriteconfig6 --file "$1" --group "$2" --key ForegroundInactive "$3"
+}
+if [ -f "$CS/WhiteSur.colors" ]; then
+  for g in "Colors:View" "Colors:Window" "Colors:Button"; do calib_group "$CS/WhiteSur.colors" "$g" "142,142,142"; done
+  for g in "Colors:Tooltip" "Colors:Complementary";          do calib_group "$CS/WhiteSur.colors" "$g" "160,160,160"; done
+fi
+if [ -f "$CS/WhiteSurDark.colors" ]; then
+  for g in "Colors:View" "Colors:Window" "Colors:Button" "Colors:Tooltip" "Colors:Complementary"; do
+    calib_group "$CS/WhiteSurDark.colors" "$g" "160,160,160"; done
+fi
+ok "text hierarchy calibrated (unified accent + secondary tiers)"
+
 # The GTK installer insists on detecting GNOME Shell; shim it on KDE.
 msg "Installing WhiteSur GTK theme (light + dark, libadwaita)…"
 printf '#!/bin/sh\necho "GNOME Shell 46.0"\n' > "$BUILD/bin/gnome-shell"; chmod +x "$BUILD/bin/gnome-shell"
