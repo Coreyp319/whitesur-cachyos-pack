@@ -1,0 +1,7 @@
+# Hermes 4.3 36B (Nous Research) — the "smarter" option, official GGUF.
+# Q4_K_M ≈ 22 GB: borderline on 24 GB, so Ollama offloads a few layers to CPU
+# and the KV cache is kept modest (8k). Raise num_ctx only if you free VRAM
+# (smaller quant / shorter sessions) — bigger context spills more onto the CPU.
+FROM hf.co/NousResearch/Hermes-4.3-36B-GGUF:Q4_K_M
+PARAMETER num_ctx 8192
+PARAMETER temperature 0.7

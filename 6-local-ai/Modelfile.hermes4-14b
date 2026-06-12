@@ -1,0 +1,5 @@
+# Hermes 4 14B (Nous Research) — fully GPU-resident on a 24 GB card.
+# Q8_0 ≈ 15.7 GB weights; leaves room for a roomy context window.
+FROM hf.co/bartowski/NousResearch_Hermes-4-14B-GGUF:Q8_0
+PARAMETER num_ctx 16384
+PARAMETER temperature 0.7

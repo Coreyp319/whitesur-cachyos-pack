@@ -23,7 +23,9 @@ bash revert.sh           # undo (add --purge to delete installed files)
 ### 1 · Base mac desktop  — `1-base/`
 WhiteSur global theme (Plasma + Qt/Kvantum + GTK light & dark), icons, mac
 cursors, **Inter** UI font + **MesloLGS** (Menlo-like) mono for Konsole/code ·
-Big Sur wallpaper · floating **auto-hide dock** with Launchpad + pinned apps ·
+Big Sur wallpaper · floating **auto-hide dock** with Launchpad + pinned apps,
+a **curated system tray** (essentials shown, the rest collapsed — still editable
+in Configure System Tray) and an **Inter panel clock** ·
 **Spotlight** (centered KRunner, `Meta+Space`) + file search · mac-style window
 animations (scale/squash/maximize at a ~0.9 duration tuned to match the Spotlight
 motion), Mission-Control hot corner, edge tiling · **WhiteSur window decoration**

@@ -376,7 +376,7 @@ ok "toggle installed (Meta+Ctrl+T after next login)"
 msg "Building the floating dock…"
 # pinned apps: only the ones actually installed
 declare -a PINS
-for d in org.kde.dolphin firefox brave-browser code org.kde.konsole systemsettings; do
+for d in org.kde.dolphin firefox code org.kde.konsole systemsettings; do
   for base in /usr/share/applications "$HOME/.local/share/applications"; do
     [ -f "$base/$d.desktop" ] && { PINS+=("applications:$d.desktop"); break; }
   done
@@ -384,7 +384,7 @@ done
 PINS+=("applications:whitesur-theme-toggle.desktop")
 LAUNCHERS=$(IFS=,; echo "${PINS[*]}")
 
-PANEL_ID=$(qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript '
+DOCK_OUT=$(qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript '
 var ps = panels();
 for (var i=0;i<ps.length;i++){
   var w=ps[i].widgets(); var has=false;
@@ -406,16 +406,30 @@ var tasks = dock.addWidget("org.kde.plasma.icontasks");
 tasks.currentConfigGroup=["General"];
 tasks.writeConfig("launchers","'"$LAUNCHERS"'");
 dock.addWidget("org.kde.plasma.marginsseparator");
-dock.addWidget("org.kde.plasma.systemtray");
-dock.addWidget("org.kde.plasma.digitalclock");
-print(dock.id);
-' 2>/dev/null | tr -dc '0-9')
+var tray = dock.addWidget("org.kde.plasma.systemtray");
+var clock = dock.addWidget("org.kde.plasma.digitalclock");
+clock.currentConfigGroup=["Appearance"];
+clock.writeConfig("fontFamily","Inter");   // match the UI font (vs default mono)
+print(dock.id + " " + tray.id);
+' 2>/dev/null)
+PANEL_ID=$(echo "$DOCK_OUT" | grep -oE '[0-9]+' | sed -n 1p)
+TRAY_ID=$(echo "$DOCK_OUT"  | grep -oE '[0-9]+' | sed -n 2p)
 # translucent panel (not exposed in scripting API → set on the captured containment)
 if [ -n "$PANEL_ID" ]; then
   kwriteconfig6 --file plasma-org.kde.plasma.desktop-appletsrc \
     --group Containments --group "$PANEL_ID" --group General --key panelOpacity 2
   ok "dock built (containment $PANEL_ID), translucent + autohide"
 else warn "dock build returned no id — check Plasma scripting"; fi
+# System-tray curation: keep essentials in the bar, collapse the noise into the
+# expander. These are the SAME keys the "Configure System Tray → Entries" dialog
+# edits, so they stay fully user-customizable — tweak the two lists to taste.
+if [ -n "$TRAY_ID" ]; then
+  TRAY_GROUP=(--group Containments --group "$PANEL_ID" --group Applets --group "$TRAY_ID" --group General)
+  kwriteconfig6 --file plasma-org.kde.plasma.desktop-appletsrc "${TRAY_GROUP[@]}" \
+    --key shownItems  "org.kde.plasma.networkmanagement,org.kde.plasma.volume,org.kde.plasma.bluetooth,org.kde.plasma.clipboard"
+  kwriteconfig6 --file plasma-org.kde.plasma.desktop-appletsrc "${TRAY_GROUP[@]}" \
+    --key hiddenItems "org.kde.plasma.keyboardlayout,org.kde.plasma.keyboardindicator,org.kde.plasma.cameraindicator,org.kde.plasma.manage-inputmethod,org.kde.plasma.devicenotifier"
+fi
 
 # ---------------------------------------------------------------------------
 # 12. Dock bottom margin (raise the floating gap 8 -> 14 in the theme)
