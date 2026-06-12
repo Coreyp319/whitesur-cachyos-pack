@@ -1,16 +1,17 @@
 # WhiteSur macOS-style desktop pack — CachyOS / KDE Plasma 6
 
 Turns a stock **CachyOS + KDE Plasma 6 (Wayland)** install into a cohesive
-macOS-style desktop. Three independent layers — install any subset.
+macOS-style desktop. Four independent layers — install any subset.
 
 ```bash
 bash install.sh          # interactive, pick layers
-bash install.sh -y       # install all three, no prompts
+bash install.sh -y       # install all four, no prompts
 bash revert.sh           # undo (add --purge to delete installed files)
 ```
 
-> Run as your **normal user** (not root). `sudo` is used only for packages and
-> Layer 3's milou patch. **Log out / back in** afterward to activate `Meta+Space`
+> Run as your **normal user** (not root). `sudo` is used only for packages,
+> Layer 3's milou patch, and Layer 4's SDDM theming. **Log out / back in**
+> afterward to activate `Meta+Space`
 > and `Meta+Ctrl+T` (Wayland binds global shortcuts at login).
 
 ---
@@ -19,13 +20,15 @@ bash revert.sh           # undo (add --purge to delete installed files)
 
 ### 1 · Base mac desktop  — `1-base/`
 WhiteSur global theme (Plasma + Qt/Kvantum + GTK light & dark), icons, mac
-cursors, **Inter** font, Big Sur wallpaper · floating **auto-hide dock** with
-Launchpad + pinned apps · **Spotlight** (centered KRunner, `Meta+Space`) + file
-search · mac-style window animations (scale/squash/maximize), Mission-Control
-hot corner, edge tiling · heavy blur · frosted menus & Konsole · slight dock
-bottom-margin · **one-click light↔dark toggle** (dock icon / Spotlight /
-`Meta+Ctrl+T`) · Firefox set to **follow the system** light/dark theme · QoL:
-NumLock on at login, Night Color (warm evenings).
+cursors, **Inter** UI font + **MesloLGS** (Menlo-like) mono for Konsole/code ·
+Big Sur wallpaper · floating **auto-hide dock** with Launchpad + pinned apps ·
+**Spotlight** (centered KRunner, `Meta+Space`) + file search · mac-style window
+animations (scale/squash/maximize at a ~0.9 duration tuned to match the Spotlight
+motion), Mission-Control hot corner, edge tiling · heavy blur · frosted menus &
+Konsole · 10px floating dock bottom-margin · **one-click light↔dark toggle** (dock
+icon / Spotlight / `Meta+Ctrl+T`) that also **swaps the Big Sur wallpaper** light↔dark
+· Firefox set to **follow the system** light/dark theme · QoL: NumLock on at login,
+Night Color (warm evenings).
 
 ⚠ **Replaces your panel/dock** (any panel with a task manager is rebuilt as the
 mac dock) and restarts plasmashell. Reverting: System Settings → Global Theme →
@@ -34,10 +37,13 @@ Breeze, then remove the dock panel.
 ### 2 · System Settings refine  — `2-settings-refine/`
 Uniform **monochrome line icons** for the System Settings sidebar sections
 (replaces the mixed colorful set). A small **systemd path-watcher** re-tints them
-to the active text color on every light↔dark switch (~400 ms), so they stay
-readable in both modes. Also ships an optional **Kvantum whitespace fork**
-(`WhiteSurRefined`, not auto-selected) that adds breathing room in classic Qt
-dialogs. Fully reversible: `2-settings-refine/revert.sh`.
+to the active text color on every light↔dark switch (~400 ms) **and re-emits the
+icon-changed signal** so the running taskbar/tray follow live, and flips the
+theme's inherit order so non-overridden icons track the scheme (light-first in
+light mode) instead of washing out. Also ships an optional **Kvantum whitespace
+fork** (`WhiteSurRefined` + `WhiteSurRefinedDark`, not auto-selected) that adds
+breathing room in classic Qt dialogs; if enabled, the watcher rides it light↔dark
+too. Fully reversible: `2-settings-refine/revert.sh`.
 
 > Scope note: the Settings sidebar *spacing/layout* is compiled Kirigami QML and
 > is **not** reachable by any theming overlay — only the iconography and selection
@@ -52,6 +58,16 @@ dialogs. Fully reversible: `2-settings-refine/revert.sh`.
   rows, or prefix for instant — `s …`/`ddg …` (DuckDuckGo), `gh …` (GitHub),
   `w …` (Wikipedia), `yt …` (YouTube). `c …`/`ai …` → **Ask Claude**, shown only
   if the `claude` CLI is on `PATH` (otherwise it stays hidden).
+
+### 4 · Login + lock screen  — `4-login-lock/`
+Brings the two stock-Breeze surfaces into line so **login → lock → desktop** read
+as one environment, by giving them the same Big Sur wallpaper:
+- **Lock screen** *(no sudo)*: WhiteSur color scheme + Big Sur wallpaper.
+- **SDDM login** *(sudo)*: overlays the breeze SDDM theme's background via a
+  **non-destructive** `theme.conf.user` (the shipped theme is left untouched).
+
+Run as your normal user — the lock part applies immediately and `sudo` prompts
+once for the SDDM part. Revert: `4-login-lock/revert.sh`.
 
 ---
 
@@ -72,7 +88,7 @@ dialogs. Fully reversible: `2-settings-refine/revert.sh`.
 
 ## Reverting everything
 ```bash
-bash revert.sh           # layers 2 & 3 fully; layer 1 prints manual steps
+bash revert.sh           # layers 2, 3 & 4 fully; layer 1 prints manual steps
 bash revert.sh --purge   # also deletes the installed overlay files
 ```
 
@@ -82,4 +98,5 @@ install.sh  revert.sh  README.md
 1-base/            whitesur-cachyos-macos.sh
 2-settings-refine/ install.sh revert.sh icons/ kvantum/ systemd/ bin/
 3-krunner-finder/  install.sh revert.sh row-tweak/ claude-runner/
+4-login-lock/      install.sh revert.sh
 ```
