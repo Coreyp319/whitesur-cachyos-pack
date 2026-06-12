@@ -24,11 +24,13 @@ cursors, **Inter** UI font + **MesloLGS** (Menlo-like) mono for Konsole/code ·
 Big Sur wallpaper · floating **auto-hide dock** with Launchpad + pinned apps ·
 **Spotlight** (centered KRunner, `Meta+Space`) + file search · mac-style window
 animations (scale/squash/maximize at a ~0.9 duration tuned to match the Spotlight
-motion), Mission-Control hot corner, edge tiling · heavy blur · frosted menus &
-Konsole · 10px floating dock bottom-margin · **one-click light↔dark toggle** (dock
-icon / Spotlight / `Meta+Ctrl+T`) that also **swaps the Big Sur wallpaper** light↔dark
-· Firefox set to **follow the system** light/dark theme · QoL: NumLock on at login,
-Night Color (warm evenings).
+motion), Mission-Control hot corner, edge tiling · **WhiteSur window decoration**
+(Aurorae traffic-light buttons) · heavy blur · frosted menus & Konsole · mac-style
+**font smoothing** (no hinting + RGB subpixel) · 10px floating dock bottom-margin ·
+**WhiteSur boot splash** · top-right notifications · **one-click light↔dark toggle**
+(dock icon / Spotlight / `Meta+Ctrl+T`) that also flips **window decoration, splash,
+and the Big Sur wallpaper** light↔dark · Firefox set to **follow the system**
+light/dark theme · QoL: NumLock on at login, Night Color (warm evenings).
 
 ⚠ **Replaces your panel/dock** (any panel with a task manager is rebuilt as the
 mac dock) and restarts plasmashell. Reverting: System Settings → Global Theme →

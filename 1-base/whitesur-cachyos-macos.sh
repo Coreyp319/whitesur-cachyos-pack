@@ -165,6 +165,14 @@ kwriteconfig6 --file kdeglobals --group KDE --key widgetStyle kvantum
 kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage com.github.vinceliuice.WhiteSur
 kwriteconfig6 --file "$HOME/.config/Kvantum/kvantum.kvconfig" --group General --key theme WhiteSur
 kwriteconfig6 --file kcminputrc --group Mouse --key cursorTheme WhiteSur-cursors
+# Window decoration: WhiteSur Aurorae (mac traffic-light buttons) if installed,
+# else leave the stock decoration. Login splash -> WhiteSur.
+if [ -d "$HOME/.local/share/aurorae/themes/WhiteSur" ]; then
+  kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key library org.kde.kwin.aurorae
+  kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key theme __aurorae__svg__WhiteSur
+fi
+kwriteconfig6 --file ksplashrc --group KSplash --key Engine KSplashQML
+kwriteconfig6 --file ksplashrc --group KSplash --key Theme  com.github.vinceliuice.WhiteSur
 # GTK light
 for v in gtk-3.0 gtk-4.0; do
   kwriteconfig6 --file $v/settings.ini --group Settings --key gtk-theme-name WhiteSur-Light
@@ -190,6 +198,11 @@ kwriteconfig6 --file kdeglobals --group WM      --key activeFont "Inter Display,
 if fc-list | grep -qi "MesloLGS Nerd Font"; then
   kwriteconfig6 --file kdeglobals --group General --key fixed "MesloLGS Nerd Font Mono,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1"
 fi
+# Mac-like font smoothing: no hinting + RGB subpixel = the soft macOS rendering
+# (vs the crisper, more-hinted Linux default).
+kwriteconfig6 --file kdeglobals --group General --key XftAntialias true
+kwriteconfig6 --file kdeglobals --group General --key XftHintStyle hintnone
+kwriteconfig6 --file kdeglobals --group General --key XftSubPixel  rgb
 ok "fonts set"
 
 # ---------------------------------------------------------------------------
@@ -228,6 +241,7 @@ kwriteconfig6 --file kglobalshortcutsrc --group "org.kde.krunner.desktop" --key 
   "Alt+Space${TAB}Alt+F2${TAB}Meta+Space,Alt+Space${TAB}Alt+F2,KRunner"
 kwriteconfig6 --file kcminputrc --group Keyboard --key NumLock 0          # numlock on at login
 kwriteconfig6 --file kwinrc     --group NightColor --key Active true      # warm evenings
+kwriteconfig6 --file plasmanotifyrc --group Notifications --key PopupPosition TopRight  # mac-style
 command -v balooctl6 >/dev/null && balooctl6 enable >/dev/null 2>&1 && ok "file search enabled"
 ok "menus/spotlight/QoL done"
 
@@ -305,9 +319,11 @@ cur=$(kreadconfig6 --file kdeglobals --group General --key ColorScheme)
 if [[ "$cur" == *Dark* ]]; then
   COLORS=WhiteSur; PTHEME=WhiteSur; ICONS=WhiteSur; KV=WhiteSur
   GTK=WhiteSur-Light; PREFERDARK=false; LNF=com.github.vinceliuice.WhiteSur; MODE=light
+  DECO=__aurorae__svg__WhiteSur;      SPLASH=com.github.vinceliuice.WhiteSur
 else
   COLORS=WhiteSurDark; PTHEME=WhiteSur-dark; ICONS=WhiteSur-dark; KV=WhiteSurDark
   GTK=WhiteSur-Dark; PREFERDARK=true; LNF=com.github.vinceliuice.WhiteSur-dark; MODE=dark
+  DECO=__aurorae__svg__WhiteSur-dark; SPLASH=com.github.vinceliuice.WhiteSur-dark
 fi
 plasma-apply-colorscheme  "$COLORS" >/dev/null 2>&1
 plasma-apply-desktoptheme "$PTHEME" >/dev/null 2>&1
@@ -322,6 +338,11 @@ else
 fi
 kwriteconfig6 --file "$HOME/.config/Kvantum/kvantum.kvconfig" --group General --key theme "$KV"
 kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage "$LNF"
+# Window decoration (WhiteSur Aurorae) + login splash follow the mode.
+kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key library "org.kde.kwin.aurorae"
+kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key theme "$DECO"
+kwriteconfig6 --file ksplashrc --group KSplash --key Theme "$SPLASH"
+qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1
 # Wallpaper: light vs dark Big Sur (best-effort — only if the image exists).
 if [ "$MODE" = dark ]; then WALLDIR=WhiteSur-dark; else WALLDIR=WhiteSur-light; fi
 WALL=$(ls "$HOME/.local/share/wallpapers/$WALLDIR"/contents/images/*.jpg 2>/dev/null | head -1)
