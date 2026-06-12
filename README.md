@@ -1,13 +1,14 @@
 # WhiteSur CachyOS pack — macOS-style desktop + OS customization
 
 A personal **CachyOS + KDE Plasma 6 (Wayland)** customization. Layers 1–4 turn a
-stock install into a cohesive macOS-style desktop; Layer 5 adds general system
-quality-of-life that has nothing to do with the *look*. Five independent layers —
-install any subset.
+stock install into a cohesive macOS-style desktop; Layers 5–6 add general system
+quality-of-life and a local AI stack that have nothing to do with the *look*;
+Layers 7–9 add Apple-style notifications, Dolphin Quick Look, and GPU shader
+effects. Nine independent layers — install any subset.
 
 ```bash
 bash install.sh          # interactive, pick layers
-bash install.sh -y       # install all five, no prompts
+bash install.sh -y       # install all nine, no prompts
 bash revert.sh           # undo (add --purge to delete installed files)
 ```
 
@@ -30,7 +31,9 @@ in Configure System Tray) and an **Inter panel clock** ·
 animations (scale/squash/maximize at a ~0.9 duration tuned to match the Spotlight
 motion), Mission-Control hot corner, edge tiling · **WhiteSur window decoration**
 (Aurorae traffic-light buttons) · heavy blur · frosted menus & Konsole · mac-style
-**font smoothing** (no hinting + RGB subpixel) · 10px floating dock bottom-margin ·
+**font smoothing** (no hinting + RGB subpixel) · **calibrated text hierarchy**
+(one accent + one secondary tier across every surface, fixing leftover-Breeze
+accent/secondary drift) · 10px floating dock bottom-margin ·
 **WhiteSur boot splash** · top-right notifications · **one-click light↔dark toggle**
 (dock icon / Spotlight / `Meta+Ctrl+T`) that also flips **window decoration, splash,
 and the Big Sur wallpaper** light↔dark · Firefox set to **follow the system**
@@ -89,6 +92,95 @@ prompt (Enter = yes; `-y` accepts all), reversible, `sudo` for package installs:
 
 Revert: `5-system-qol/revert.sh` (`--purge` also removes the packages).
 
+### 6 · Local AI  — `6-local-ai/`
+A local LLM stack on the NVIDIA GPU — independent of the desktop look. Each item
+is its own prompt (Enter = yes; `-y` accepts all), reversible, `sudo` only for the
+package install:
+- **`ollama-cuda`** — the runner + service, exposing a native API and an
+  **OpenAI-compatible endpoint** at `http://localhost:11434/v1` (localhost only).
+- **Hermes 4 14B** (`hermes4-14b`) — Q8_0, ~15.7 GB, fully GPU-resident on a 24 GB
+  card; fast, with a 16k context. The snappy default.
+- **Hermes 4.3 36B** (`hermes4.3-36b`) — Q4_K_M, ~22 GB; smarter but borderline on
+  24 GB, so a few layers offload to CPU and the KV cache is kept at 8k.
+- **Smoke test** — pings `/v1/chat/completions` and shows `ollama ps` (GPU split).
+
+Models are defined by the two `Modelfile.*` (quant + context); edit and re-run
+`ollama create` to retune. No sandbox yet — this just serves the models.
+Revert: `6-local-ai/revert.sh` (`--purge` also removes the package + models +
+`/var/lib/ollama` blobs).
+
+### 7 · Apple-style notifications  — `7-notifications/`
+Replaces Plasma's built-in notifications (a compiled C++ applet that can't be
+restyled) with **[swaync](https://github.com/ErikReider/SwayNotificationCenter)**,
+a fully CSS-themeable GTK4 daemon. `sudo` only for the package:
+- **Frosted top-right toasts** — rounded ~16px cards with generous whitespace,
+  light + dark variants that **ride the Meta+Ctrl+T toggle** via a `kdeglobals`
+  path-watcher (same pattern as Layer 2's icon watcher).
+- **Actionable** — app actions render as Apple-style pill buttons; inline reply
+  shows for apps that advertise it (`7-notifications/demo/swaync-demo.sh` proves it).
+- **Notification center** — frosted history panel with a **Do Not Disturb** toggle,
+  bound to **Meta+N**.
+- The handoff: a user-level `org.freedesktop.Notifications` D-Bus shadow points the
+  name at swaync, and the tray Notifications entry is disabled. **Log out / back in**
+  to guarantee swaync owns notifications.
+- **Note — no real blur:** KWin doesn't blur layer-shell surfaces, so the "frost" is
+  translucency (a soft `rgba` card over the wallpaper), not compositor backdrop blur.
+
+Revert: `7-notifications/revert.sh` (`--purge` also removes the config + package);
+restores Plasma's native notifications after a relogin.
+
+### 8 · Dolphin Quick Look  — `8-dolphin-quicklook/`
+macOS-style **Quick Look**: select a file in Dolphin and press **Space** to pop up a
+preview; press **Space / Esc / Q** to dismiss it, **A / D** to step prev/next through
+the folder, **Return** to open it. Previews images, video, audio, PDF and text via
+**[kiview](https://github.com/Nyre221/kiview)** (a Qt/KDE quick-preview popup). Built
+from **git master** via the bundled `PKGBUILD` (the tagged AUR `kiview` v1.1 lacks the
+direct `kiview -s <file>` mode and instead grabs the selection over D-Bus, which glitches
+from a service menu). Implemented with user-level files:
+- A **Quick Look service menu** (`~/.local/share/kio/servicemenus/`, installed
+  executable so KIO trusts it) adding a top-level right-click entry that runs
+  `kiview -s` on the selected file (all file types).
+- **Space bound to that action *inside Dolphin*** via its `ServiceMenuShortcutManager`
+  (an `<ActionProperties>` entry in `~/.local/share/kxmlgui5/dolphin/dolphinui.rc`),
+  so Space stays scoped to the file manager — untouched in every other app. Space is
+  also cleared from Dolphin's built-in **Selection Mode** toggle to avoid a conflict
+  (it stays on the toolbar button).
+- Ships Dolphin 26.04's UI rc (gui version 48) as the base, since KXmlGui only honours
+  a local rc that carries the full menu structure; if you've already customised Dolphin
+  shortcuts, the two lines are merged into your file instead (backed up to `.orig`).
+  On a different Dolphin version, assign Space once via *Configure Keyboard Shortcuts →
+  Context Menu Actions → Quick Look* (it then sticks).
+- **Limitation:** the preview shows the file you launched it on and navigates *that*
+  file's folder; it does **not** live-follow Dolphin's selection (no KDE tool does that).
+
+Revert: `8-dolphin-quicklook/revert.sh` (restores the original `dolphinui.rc` or removes
+ours; `--purge` also uninstalls the kiview-git package).
+
+### 9 · GPU UI effects  — `9-gpu-effects/`
+GLSL shaders running **inside KWin's GPU compositing pipeline** (Plasma 6 already draws
+the whole UI on the GPU — KWin composites through OpenGL/EGL, the shell via the QtQuick
+scene graph; this layer just changes *which* shaders run). Two opt-in items:
+- **Better Blur** (`kwin-effects-forceblur`, from the AUR) — a fork of KWin's blur that
+  can **force-blur any window** (even opaque ones), draws **rounded corners with
+  anti-aliasing**, and exposes brightness/contrast/saturation + a low-GPU **static-blur**
+  mode. It *replaces* Layer 1's stock blur (only one blur effect can run), so the install
+  flips `blurEnabled→false` / `forceblurEnabled→true` and matches BlurStrength 15. Tune
+  the rest in *Desktop Effects → Better Blur*. (Upstream is archived; the maintained
+  successor is `kwin-effects-glass` if the AUR build breaks.)
+- **Desktop shaders** (`kwin-effect-shaders`, built from source) — a single-pass GLSL
+  post-process over the **final composited image**, a ReShade/vkBasalt equivalent for the
+  whole desktop. Ships **CAS** (contrast-adaptive sharpening), FakeHDR, deband, tonemap,
+  levels. Compiles against KWin's private headers (so it's **version-fragile** across KWin
+  point releases). The visible shader pass stays **off** until you bind a toggle key
+  (*Shortcuts → KWin → Toggle Shaders*); pick/tune shaders in
+  `~/.local/share/kwin-effect-shaders_shaders/1_settings.glsl`.
+
+**Wayland only** in practice — X11 disables compositing for fullscreen apps. Both are pure
+GLSL on the OpenGL backend (KWin's Vulkan backend is still experimental as of 2026).
+
+Revert: `9-gpu-effects/revert.sh` restores Layer 1's stock blur and turns the shader pass
+off; `--purge` also removes the package, the built effect, and the shader checkout.
+
 ---
 
 ## Requirements
@@ -108,7 +200,7 @@ Revert: `5-system-qol/revert.sh` (`--purge` also removes the packages).
 
 ## Reverting everything
 ```bash
-bash revert.sh           # layers 2–5 fully; layer 1 prints manual steps
+bash revert.sh           # layers 2–9 fully; layer 1 prints manual steps
 bash revert.sh --purge   # also deletes the installed overlay files
 ```
 
@@ -120,4 +212,8 @@ install.sh  revert.sh  README.md
 3-krunner-finder/  install.sh revert.sh row-tweak/ claude-runner/
 4-login-lock/      install.sh revert.sh
 5-system-qol/      install.sh revert.sh fish/
+6-local-ai/        install.sh revert.sh Modelfile.hermes4-14b Modelfile.hermes4.3-36b
+7-notifications/   install.sh revert.sh config.json style-{light,dark}.css bin/ systemd/ dbus/ demo/
+8-dolphin-quicklook/ install.sh revert.sh whitesur-quicklook.desktop dolphinui.rc PKGBUILD
+9-gpu-effects/     install.sh revert.sh
 ```

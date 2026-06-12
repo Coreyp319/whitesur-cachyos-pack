@@ -9,6 +9,11 @@
 #                            "Ask Claude"/web-search runner
 #    4) Login + lock       — Big Sur continuity on the SDDM login + lock screens
 #    5) System QoL         — paccache, Flatpak+Flathub, fish tooling, Timeshift
+#    6) Local AI           — ollama-cuda + Hermes 4 14B / 4.3 36B on the GPU
+#    7) Notifications      — Apple-style swaync toasts + notification center
+#    8) Dolphin Quick Look — Space previews the selected file in kiview
+#    9) GPU UI effects     — Better Blur (force-blur + rounded corners) and
+#                            ReShade-style desktop GLSL shaders (CAS sharpening)
 #
 #  Run as your normal user (NOT root). Uses sudo only where noted (packages,
 #  and Layer 3's milou QML patch). Pass -y to accept all layers non-interactively.
@@ -27,7 +32,7 @@ cat <<'NOTICE'
   │   WhiteSur macOS-style desktop pack — CachyOS / KDE Plasma 6 (Wayland) │
   └──────────────────────────────────────────────────────────────────────┘
 
-  FIVE LAYERS (pick any):
+  NINE LAYERS (pick any):
     1) Base mac desktop  — the full WhiteSur transformation. REPLACES your
        panel/dock, restarts plasmashell, sets Firefox to follow system theme.
     2) Settings refine   — uniform monochrome icons for System Settings
@@ -40,6 +45,22 @@ cat <<'NOTICE'
     5) System QoL        — general OS ergonomics (NOT desktop look): weekly
        pacman-cache prune, Flatpak+Flathub, fish shell tooling (zoxide/starship/
        fzf), and Timeshift restore points. Uses sudo for package installs.
+    6) Local AI          — local LLM stack on the NVIDIA GPU: ollama-cuda runner
+       + an OpenAI-compatible API on :11434, and the Hermes 4 14B (fast) /
+       4.3 36B (smarter) models. No sandbox yet. Uses sudo for the package.
+    7) Notifications     — Apple-style notifications via swaync: frosted top-
+       right toast cards, styled action buttons + inline reply, and a
+       notification center with Do-Not-Disturb (Meta+N). Replaces Plasma's
+       native notifications. Uses sudo for the package.
+    8) Dolphin Quick Look — macOS-style preview: select a file in Dolphin and
+       press Space to pop up a kiview preview (Space/Esc to dismiss; arrows flip
+       through the folder). Adds a "Quick Look" service menu + binds Space to it
+       inside Dolphin only. Builds kiview from git master. Fully reversible.
+    9) GPU UI effects     — GLSL shaders inside KWin's GPU compositing pipeline:
+       Better Blur (force-blur ANY window + rounded corners; REPLACES Layer 1's
+       stock blur — from the AUR) and kwin-effect-shaders (ReShade-style desktop
+       post-process: CAS sharpening, deband, tonemap — built from source). The
+       shader pass stays OFF until you bind a toggle key. Fully reversible.
 
   REQUIREMENTS:  Arch/CachyOS · KDE Plasma 6 · Wayland · run as normal user.
   REVERSIBLE:    ./revert.sh  (undoes every layer; --purge also deletes files).
@@ -65,6 +86,18 @@ if ask "LAYER 4 — login + lock screen (sudo for SDDM)"; then
 fi
 if ask "LAYER 5 — system QoL (sudo for package installs)"; then
   bash "$HERE/5-system-qol/install.sh" $([ "$ALL" = 1 ] && echo -y) || echo "  (layer 5 reported issues — see above)"
+fi
+if ask "LAYER 6 — local AI: Ollama + Hermes (sudo for the package)"; then
+  bash "$HERE/6-local-ai/install.sh" $([ "$ALL" = 1 ] && echo -y) || echo "  (layer 6 reported issues — see above)"
+fi
+if ask "LAYER 7 — Apple-style notifications (swaync)"; then
+  bash "$HERE/7-notifications/install.sh" $([ "$ALL" = 1 ] && echo -y) || echo "  (layer 7 reported issues — see above)"
+fi
+if ask "LAYER 8 — Dolphin Quick Look (Space → preview)"; then
+  bash "$HERE/8-dolphin-quicklook/install.sh" $([ "$ALL" = 1 ] && echo -y) || echo "  (layer 8 reported issues — see above)"
+fi
+if ask "LAYER 9 — GPU UI effects (Better Blur + desktop shaders)"; then
+  bash "$HERE/9-gpu-effects/install.sh" $([ "$ALL" = 1 ] && echo -y) || echo "  (layer 9 reported issues — see above)"
 fi
 
 echo; echo ":: Settling Plasma…"
