@@ -25,8 +25,8 @@ layout(std140, binding = 0) uniform buf {
     float uInteractivity;   // cursor influence 0..1 (config)
     float uDark;            // 1 = dark variant, 0 = light (follows the colour scheme)
     float uIntensity;       // colour vividness; 1 = as-designed, <1 muted, >1 punchy
-    int   uTheme;           // 0 Big Sur·1 Monterey·2 Graphite·3 Sunset·4 Nord·5 Custom
-    int   uStyle;           // base look: 0 Flow·1 Hills·2 Silk curtains·3 Caustics·4 Ink in water
+    int   uTheme;           // 0 Big Sur·1 Monterey·2 Graphite·3 Sunset·4 Nord·5 Laserwave·6 Vaporwave·7 Cyberpunk·8 Outrun·9 Custom
+    int   uStyle;           // base look: 0 Flow·1 Hills·2 Silk curtains·3 Caustics·4 Ink in water·5 Laserwave·6 Vaporwave·7 Cyberpunk
     // custom palette (used when uTheme == 5); .rgb of each, low → high stop
     vec4  uColor0;
     vec4  uColor1;
@@ -147,6 +147,30 @@ void palette(int theme, out vec3 c0, out vec3 c1, out vec3 c2, out vec3 c3, out 
         c2 = vec3(0.37, 0.51, 0.67);
         c3 = vec3(0.53, 0.75, 0.82);
         c4 = vec3(0.85, 0.87, 0.91);
+    } else if (theme == 5) {     // Laserwave — purple-black → electric purple → hot magenta → cyan
+        c0 = vec3(0.07, 0.04, 0.12);
+        c1 = vec3(0.16, 0.08, 0.30);
+        c2 = vec3(0.55, 0.16, 0.70);
+        c3 = vec3(0.95, 0.35, 0.74);
+        c4 = vec3(0.22, 0.90, 0.92);
+    } else if (theme == 6) {     // Vaporwave — dusk indigo → lavender → candy pink → pastel cyan
+        c0 = vec3(0.12, 0.07, 0.22);
+        c1 = vec3(0.38, 0.24, 0.56);
+        c2 = vec3(0.74, 0.42, 0.95);
+        c3 = vec3(1.00, 0.45, 0.80);
+        c4 = vec3(0.40, 0.88, 0.98);
+    } else if (theme == 7) {     // Cyberpunk — ink black → deep teal → electric cyan → magenta → acid yellow
+        c0 = vec3(0.02, 0.02, 0.05);
+        c1 = vec3(0.04, 0.14, 0.24);
+        c2 = vec3(0.00, 0.58, 0.76);
+        c3 = vec3(1.00, 0.16, 0.56);
+        c4 = vec3(0.98, 0.92, 0.20);
+    } else if (theme == 8) {     // Outrun — night-purple → neon magenta → sun-orange → gold (a neon sunset grid)
+        c0 = vec3(0.05, 0.02, 0.16);
+        c1 = vec3(0.20, 0.06, 0.40);
+        c2 = vec3(0.85, 0.15, 0.55);
+        c3 = vec3(1.00, 0.42, 0.30);
+        c4 = vec3(1.00, 0.86, 0.30);
     } else {                     // Big Sur — indigo → blue → violet → coral
         c0 = vec3(0.05, 0.06, 0.16);
         c1 = vec3(0.11, 0.18, 0.45);
@@ -382,6 +406,185 @@ vec3 baseLook(int style, vec2 warpP, vec2 p, float t,
         return mix(water, pigment, clamp(ink * (1.0 + 0.08 * mBass), 0.0, 1.0));
     }
 
+    if (style == 5) {
+        // --- Laserwave: a neon perspective grid rushing to a vanishing point under a
+        //     banded retro sun, wrapped in synthwave ATMOSPHERE — a hot horizon haze
+        //     band where sky meets grid, a twinkling starfield + nebula in the deep
+        //     sky, the sun's glow mirrored down the grid, and faint CRT scanlines.
+        //     Palette stops only; pairs best with Laserwave/Outrun. shade = neon energy.
+        const float HOR = -0.04;                          // horizon a touch above centre
+        vec2  sc   = vec2(0.0, HOR - 0.22);               // sun centre, above horizon
+        float Rs   = 0.22;
+        vec3  col5;
+        float shd;
+        if (p.y > HOR) {                                  // ---- neon floor grid ----
+            float d    = (p.y - HOR) + 0.012;             // depth (small near horizon)
+            float zl   = 0.16 / d + t * (1.6 + 1.2 * mBass);   // lines rush forward
+            float xl   = warpP.x / d * 1.1;               // radiate from the vanishing point
+            float w    = 0.085 + 0.06 * d;                // lines thicken with nearness
+            float gz   = smoothstep(w, 0.0, min(fract(zl), 1.0 - fract(zl)));
+            float gx   = smoothstep(w, 0.0, min(fract(xl), 1.0 - fract(xl)));
+            float grid = max(gz, gx);
+            float fade = smoothstep(0.0, 0.06, p.y - HOR);    // dissolve into horizon haze
+            grid      *= fade;
+            vec3 floorBase = mix(c1, c0, clamp((p.y - HOR) * 1.6, 0.0, 1.0));
+            vec3 lineCol   = ramp(0.55 + 0.40 * grid, c0, c1, c2, c3, c4);
+            col5 = mix(floorBase, lineCol, grid);
+            // the sun's glow reflected straight down the grid (a luminous central aisle)
+            float refl = exp(-abs(warpP.x) * 2.6) * smoothstep(0.02, 0.5, p.y - HOR);
+            col5 += mix(c3, c4, 0.5) * refl * 0.18;
+            shd = max(grid * (1.0 + 0.4 * mBeat), refl * 0.5);
+        } else {                                          // ---- sky + banded sun ----
+            float up     = smoothstep(HOR, HOR - 0.8, p.y);   // 0 at horizon → 1 at top
+            vec3  skyCol = mix(c1, c0, up);
+            // nebula: faint fbm cloud body in the deep sky, palette-tinted
+            float neb = fbm(vec2(p.x * 1.4 + 3.0, p.y * 1.8 - t * 0.05));
+            skyCol = mix(skyCol, mix(c2, c3, 0.5), neb * neb * 0.18 * up);
+            // starfield (twinkling), fading in toward the top
+            vec2  sg   = floor((p + 8.0) * 110.0);
+            float sr   = hash(sg);
+            float star = step(0.987, sr) * (0.4 + 0.6 * sin(t * 4.0 + sr * 40.0));
+            skyCol += c4 * max(star, 0.0) * 0.6 * up;
+            float sd     = length(p - sc);
+            float sy     = clamp((p.y - (sc.y - Rs)) / (2.0 * Rs), 0.0, 1.0);  // 0 top → 1 bottom of disc
+            float slit   = smoothstep(0.45, 0.55, fract(sy * 9.0));            // horizontal cuts
+            float cut    = mix(1.0, slit, smoothstep(0.40, 1.0, sy));          // only in the lower half
+            float disc   = smoothstep(Rs, Rs - 0.012, sd) * cut;
+            float halo   = exp(-sd * 5.0);                 // soft outer glow
+            vec3  sunCol = mix(c4, c3, sy);
+            col5  = mix(skyCol, sunCol, disc);
+            col5 += sunCol * halo * 0.40 * (1.0 + 0.4 * mBeat);               // bloom
+            shd = max(disc, halo * 0.5);
+        }
+        // ---- shared atmosphere ----
+        float hz = exp(-abs(p.y - HOR) * 8.0);             // hot horizon haze band
+        col5 += mix(c3, c4, 0.4) * hz * 0.40;
+        shd = max(shd, hz * 0.6);
+        col5 *= 1.0 - 0.05 * (0.5 + 0.5 * sin(p.y * 380.0));   // faint CRT scanlines
+        shade = clamp(shd, 0.0, 1.0);
+        return col5;
+    }
+
+    if (style == 6) {
+        // --- Vaporwave: the iconic perspective CHECKERBOARD floor under a big soft
+        //     sun, wrapped in DREAMY ATMOSPHERE — pastel cloud bands drifting in the
+        //     sky, the sun mirrored on the floor, a hazy horizon, and a soft vignette.
+        //     Rounder and softer than Laserwave (no slits, no scanlines). Palette only.
+        const float HOR = -0.02;
+        vec2  sc   = vec2(0.0, HOR - 0.24);
+        float Rs   = 0.26;
+        vec3  col6;
+        float shd;
+        if (p.y > HOR) {                                  // ---- checkerboard floor ----
+            float d   = (p.y - HOR) + 0.015;
+            float zl  = 0.16 / d + t * (0.9 + 0.6 * mBass);
+            float xl  = warpP.x / d * 1.1;
+            float chk = mod(floor(zl) + floor(xl), 2.0);  // 0/1 tiles
+            float ez  = smoothstep(0.10, 0.0, min(fract(zl), 1.0 - fract(zl)));
+            float ex  = smoothstep(0.10, 0.0, min(fract(xl), 1.0 - fract(xl)));
+            float seam = max(ez, ex);                     // a little glow on the tile seams
+            float fade = smoothstep(0.0, 0.07, p.y - HOR);
+            vec3 floorCol = mix(mix(c0, c1, 0.5), c2, chk);
+            vec3 seamCol  = ramp(0.7, c0, c1, c2, c3, c4);
+            floorCol = mix(floorCol, seamCol, seam * fade * 0.6);
+            // the sun mirrored on the floor (a wavering glow down the centre aisle)
+            float refl = exp(-abs(warpP.x) * 2.2) * smoothstep(0.0, 0.45, p.y - HOR);
+            floorCol += mix(c3, c4, 0.5) * refl * 0.20;
+            col6 = floorCol;
+            shd  = max((0.3 + 0.4 * chk) * fade + seam * 0.4, refl * 0.6);
+        } else {                                          // ---- soft sun + clouds ----
+            float up     = smoothstep(HOR, HOR - 0.8, p.y);
+            vec3  skyCol = mix(c1, c0, up);
+            // pastel cloud bands drifting slowly across the sky
+            float cl = fbm(vec2(p.x * 1.6 - t * 0.12, p.y * 3.0 + 2.0));
+            skyCol = mix(skyCol, mix(c3, c4, 0.5), smoothstep(0.5, 0.92, cl) * 0.22);
+            float sd     = length(p - sc);
+            float sy     = clamp((p.y - (sc.y - Rs)) / (2.0 * Rs), 0.0, 1.0);
+            float disc   = smoothstep(Rs, Rs - 0.06, sd); // soft edge, no slits
+            float halo   = exp(-sd * 4.6);
+            // pink-dominant sun (c3) with a c4 crown — keeps it from blooming to
+            // flat white when the palette's highlight stop is a pale pastel.
+            vec3  sunCol = mix(c3, c4, smoothstep(0.0, 0.55, 1.0 - sy));
+            col6  = mix(skyCol, sunCol, disc);
+            col6 += sunCol * halo * 0.22;
+            shd = max(disc, halo * 0.5);
+        }
+        // ---- shared atmosphere ----
+        float hz = exp(-abs(p.y - HOR) * 7.0);             // hazy pastel horizon band
+        col6 += mix(c3, c4, 0.5) * hz * 0.25;
+        shd = max(shd, hz * 0.4);
+        col6 *= 1.0 - 0.18 * dot(p, p);                    // soft vignette for dreaminess
+        shade = clamp(shd, 0.0, 1.0);
+        return col6;
+    }
+
+    if (style == 7) {
+        // --- Cyberpunk: a layered neon skyline drowning in smog. THREE building ranks
+        //     recede into magenta/cyan light-pollution haze — far ranks wash toward the
+        //     smog colour (atmospheric perspective), the near rank is near-black with
+        //     dense lit windows. A glow band sits on the skyline; rain falls; a wet-
+        //     street sheen pools at the bottom. Palette stops only. shade = neon energy.
+        // ---- smoggy sky: darkest up top, glowing toward the skyline ----
+        float toHor = smoothstep(-0.5, 0.16, p.y);
+        vec3  col7  = mix(c0, mix(c1, c2, 0.45), toHor);
+        float smog  = fbm(vec2(p.x * 1.3 + t * 0.12, p.y * 1.7 - t * 0.04));
+        col7 += mix(c2, c3, 0.5) * smog * smog * 0.12 * toHor;
+        col7 += mix(c3, c2, 0.4) * exp(-abs(p.y - 0.10) * 3.2) * 0.22;   // glow on the skyline
+        float sh = toHor * 0.22;
+
+        // ---- building ranks, far (0) -> near (2): drawn back-to-front ----
+        for (int L = 0; L < 3; L++) {
+            float fl     = float(L);
+            float depth  = 1.0 - fl * 0.5;                // 1 far .. 0 near
+            float scale  = 4.5 + fl * 3.5;                // near rank = more, thinner towers
+            float amp    = 0.40 - fl * 0.07;              // far rank spreads tallest
+            float ox     = fl * 13.7;                     // decorrelate the ranks
+            float bx     = warpP.x * scale + ox;
+            float ci     = floor(bx);
+            float fx     = fract(bx);
+            float h      = hash(vec2(ci, 3.1 + fl));
+            float skyTop = 0.16 - amp;                    // highest a tower in this rank reaches
+            float topY   = skyTop + (1.0 - h) * amp;      // this tower's top edge
+            float present = step(0.12, h);                // a few columns are streets (no tower)
+            if (present > 0.5 && p.y > topY) {
+                float seam = smoothstep(0.0, 0.025, fx) * smoothstep(1.0, 0.975, fx);
+                // far towers wash toward the smog/glow colour (atmospheric perspective)
+                vec3 body = mix(mix(c0, c1, 0.25), mix(c1, c2, 0.5), depth);
+                col7 = mix(col7, body, seam);
+                sh   = mix(sh, 0.08 + 0.06 * depth, seam);
+                if (L >= 1) {                             // lit windows on mid + near ranks
+                    float wc  = floor(fx * 5.0);
+                    float wr  = floor((p.y - topY) * 24.0);
+                    float gx  = fract(fx * 5.0);
+                    float gy  = fract((p.y - topY) * 24.0);
+                    float lit = step(0.52, hash(vec2(wc + ci * 5.0, wr * 1.7 + fl)));
+                    float win = lit * step(0.22, gx) * step(gx, 0.78)
+                                    * step(0.22, gy) * step(gy, 0.78) * seam;
+                    vec3 wcol = ramp(0.5 + 0.45 * hash(vec2(wc + ci, wr)), c0, c1, c2, c3, c4);
+                    col7 = mix(col7, wcol, win);
+                    sh   = max(sh, win);
+                }
+            }
+        }
+
+        // ---- rain: thin fast streaks in scattered columns (time-driven) ----
+        float rcol   = floor(warpP.x * 110.0);
+        float ry     = fract(p.y * 2.0 + t * (3.0 + 2.0 * hash(vec2(rcol, 4.0))) * 6.0
+                             + hash(vec2(rcol, 8.0)) * 10.0);
+        float rain   = smoothstep(0.0, 0.03, ry) * smoothstep(0.16, 0.03, ry)
+                       * step(0.66, hash(vec2(rcol, 1.0))) * 0.4;
+        col7 += mix(c3, c4, 0.4) * rain;
+        sh = max(sh, rain * 0.4);
+
+        // ---- wet-street sheen pooling at the very bottom (bass swells it) ----
+        float street = smoothstep(0.36, 0.5, p.y);
+        col7 += mix(c2, c3, 0.5) * street * 0.16 * (1.0 + 0.4 * mBass);
+        sh = max(sh, street * 0.28);
+
+        shade = clamp(sh, 0.0, 1.0);
+        return col7;
+    }
+
     // --- style 0 (default) Flow: domain-warped fbm ribbons that genuinely FLOW
     //     AROUND windows (stones in the stream), idle or not. The trick is that the
     //     advection — not a static coord-warp — carries the routing: a static warp
@@ -428,12 +631,16 @@ void main() {
     // the music packet handed to every style (see baseLook). Four eased drives,
     // each master-gated, with distinct roles: bass=scale, mid=body, level=breath,
     // beat=pulse. Treble is intentionally absent — too fast, it reads as jitter.
-    float mBass  = uBass   * music;
-    float mMid   = uMid    * music;
-    float mLevel = uLevel  * music;
+    // mScale dials the whole packet to ~1/5 of its former range: at full strength
+    // the reaction jumped straight to chaotic. The slider still scales within this
+    // gentler ceiling, so music breathes the scene rather than thrashing it.
+    float mScale = music * 0.2;
+    float mBass  = uBass   * mScale;
+    float mMid   = uMid    * mScale;
+    float mLevel = uLevel  * mScale;
     // beat is gated to STRONG transients only (weak-beat flicker removed) so the
     // pulse is a deliberate hit shared by the per-style puff AND the light flare
-    float mBeat  = smoothstep(0.30, 0.80, uBeat) * music;
+    float mBeat  = smoothstep(0.30, 0.80, uBeat) * mScale;
     vec4  mus    = vec4(mBass, mMid, mLevel, mBeat);
     // one shared "drive" the whole scene responds to (low+mid body — treble is
     // too fast to map to motion without it reading as jitter)
@@ -512,7 +719,7 @@ void main() {
 
     vec3 c0, c1, c2, c3, c4;
     palette(uTheme, c0, c1, c2, c3, c4);
-    if (uTheme == 5) {   // user's custom palette overrides the preset
+    if (uTheme == 9) {   // user's custom palette overrides the preset
         c0 = uColor0.rgb; c1 = uColor1.rgb; c2 = uColor2.rgb;
         c3 = uColor3.rgb; c4 = uColor4.rgb;
     }
@@ -525,11 +732,18 @@ void main() {
         // factors (0.82/0.74…) lifted the dark stops almost to the bright ones,
         // collapsing the inter-stop spread so light mode read as flat milk. Lift
         // dark stops least so the gradient keeps its contrast.
-        c0 = mix(mix(c0, vec3(0.80, 0.85, 0.95), 0.55), c0, uDark);
-        c1 = mix(mix(c1, vec3(0.78, 0.84, 0.95), 0.50), c1, uDark);
-        c2 = mix(mix(c2, vec3(0.84, 0.83, 0.95), 0.42), c2, uDark);
-        c3 = mix(mix(c3, vec3(0.92, 0.82, 0.92), 0.34), c3, uDark);
-        c4 = mix(mix(c4, vec3(1.00, 0.86, 0.78), 0.24), c4, uDark);
+        //
+        // NEON THEMES (Laserwave 5, Cyberpunk 7, Outrun 8) are neon-on-black by
+        // nature — the full daytime lift washes them to pale milk and kills the
+        // identity, so scale their lift right down: they stay dark and saturated
+        // even under a LIGHT colour scheme. Vaporwave (6) is deliberately excluded
+        // — its pastel light variant IS the authentic look, so it lifts normally.
+        float lift = (uTheme == 5 || uTheme == 7 || uTheme == 8) ? 0.22 : 1.0;
+        c0 = mix(mix(c0, vec3(0.80, 0.85, 0.95), 0.55 * lift), c0, uDark);
+        c1 = mix(mix(c1, vec3(0.78, 0.84, 0.95), 0.50 * lift), c1, uDark);
+        c2 = mix(mix(c2, vec3(0.84, 0.83, 0.95), 0.42 * lift), c2, uDark);
+        c3 = mix(mix(c3, vec3(0.92, 0.82, 0.92), 0.34 * lift), c3, uDark);
+        c4 = mix(mix(c4, vec3(1.00, 0.86, 0.78), 0.24 * lift), c4, uDark);
     }
 
     // Shared reactive accents, drawn FROM the live palette so every response —
