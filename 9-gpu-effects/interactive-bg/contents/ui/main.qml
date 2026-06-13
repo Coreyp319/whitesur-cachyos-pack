@@ -31,6 +31,14 @@ WallpaperItem {
                                 : cfgAppearance === 2 ? 1.0
                                 : (schemeDark ? 1.0 : 0.0)
 
+    // Style 8 = Liquid: a real GPU fluid sim drawn by FluidLayer.qml instead of
+    // the single-pass aurora shader. Pointer is shared with it via these raw
+    // (un-eased, 0..1, y-down) properties so the fluid gets crisp force injection.
+    readonly property bool liquid: cfgStyle === 8
+    property real pMouseX: 0.5
+    property real pMouseY: 0.5
+    property real pMouseActive: 0.0
+
     P5Support.DataSource {
         id: schemeProbe
         engine: "executable"
@@ -206,8 +214,12 @@ WallpaperItem {
     ShaderEffect {
         id: aurora
         anchors.fill: parent
+        visible: !root.liquid          // the Liquid style renders via FluidLayer instead
         // re-evaluated every frame via the iTime binding -> continuous repaint
         fragmentShader: Qt.resolvedUrl("../shaders/aurora.frag.qsb")
+
+        // persistent reactive field (cursor trails / music ripples / window wakes)
+        property variant reactTex: reactBuf
 
         property real     iTime: clock.elapsedTime
         property vector2d iResolution: Qt.vector2d(width, height)
@@ -266,6 +278,79 @@ WallpaperItem {
         Behavior on iMouseActive { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
     }
 
+    // --- reactive feedback field ------------------------------------------
+    // Persistent excitation (cursor trails / music ripples / window wakes) that
+    // aurora.frag samples for glow + flow displacement. Runs at a capped res; it
+    // is paused for the Liquid style (which has its own forces, and hides aurora).
+    readonly property int reactW: Math.max(16, Math.round(Math.min(width, 960)))
+    readonly property int reactH: Math.max(16, Math.round(reactW * (height / Math.max(1, width))))
+    ShaderEffect {
+        id: reactStep
+        width: root.reactW; height: root.reactH
+        blending: false
+        property vector2d iResolution: Qt.vector2d(root.reactW, root.reactH)
+        property real     iTime: clock.elapsedTime
+        property vector2d iMouse: Qt.vector2d(root.pMouseX, root.pMouseY)
+        property real     iMouseActive: root.pMouseActive
+        property real     uInteractivity: root.cfgInteractivity
+        property real     uWinReact: aurora.uWinReact
+        property vector4d uActiveWin: aurora.uActiveWin
+        property vector2d uActiveVel: aurora.uActiveVel
+        property real     uActiveMove: aurora.uActiveMove
+        property real     uMusicReact: aurora.uMusicReact
+        property real     uBass: aurora.uBass
+        property real     uLevel: aurora.uLevel
+        property real     uBeat: aurora.uBeat
+        property real     decay: 0.975   // higher = longer-lingering trails/ripples
+        property real     drift: 0.6
+        property variant  prevTex: reactBuf
+        fragmentShader: Qt.resolvedUrl("../shaders/react.frag.qsb")
+    }
+    ShaderEffectSource {
+        id: reactBuf
+        sourceItem: reactStep
+        live: !root.liquid; recursive: true; hideSource: true
+        format: ShaderEffectSource.RGBA16F
+        textureSize: Qt.size(root.reactW, root.reactH)
+        wrapMode: ShaderEffectSource.ClampToEdge
+    }
+
+    // Liquid style: a real GPU fluid (FluidLayer.qml) instead of the aurora
+    // shader. Only instantiated while selected, so other styles cost nothing.
+    Loader {
+        id: fluidLoader
+        anchors.fill: parent
+        active: root.liquid
+        visible: active
+        sourceComponent: fluidComponent
+    }
+    Component {
+        id: fluidComponent
+        FluidLayer {
+            iTime: clock.elapsedTime
+            iMouse: Qt.vector2d(root.pMouseX, root.pMouseY)
+            iMouseActive: root.pMouseActive
+            uTheme: root.cfgTheme
+            uDark: root.uDark
+            uIntensity: root.cfgIntensity
+            uSpeed: root.reduceMotion ? 0.0 : root.cfgSpeed
+            uColor0: root.configuration.Color0 ?? "#0d0f29"
+            uColor1: root.configuration.Color1 ?? "#1c2e73"
+            uColor2: root.configuration.Color2 ?? "#4552b8"
+            uColor3: root.configuration.Color3 ?? "#8f5cb8"
+            uColor4: root.configuration.Color4 ?? "#fa8c73"
+            // music + window reactivity (aurora holds the live bridge values even
+            // while hidden — its polling timers run regardless of style)
+            uMusicReact: aurora.uMusicReact
+            uBass: aurora.uBass
+            uBeat: aurora.uBeat
+            uWinReact: aurora.uWinReact
+            uActiveWin: aurora.uActiveWin
+            uActiveVel: aurora.uActiveVel
+            uActiveMove: aurora.uActiveMove
+        }
+    }
+
     // hover-only tracking: NoButton => presses fall through to the desktop
     MouseArea {
         anchors.fill: parent
@@ -275,8 +360,11 @@ WallpaperItem {
             aurora.iMouseX = m.x / width
             aurora.iMouseY = m.y / height
             aurora.iMouseActive = 1.0
+            root.pMouseX = m.x / width
+            root.pMouseY = m.y / height
+            root.pMouseActive = 1.0
         }
-        onEntered: aurora.iMouseActive = 1.0
-        onExited:  aurora.iMouseActive = 0.0
+        onEntered: { aurora.iMouseActive = 1.0; root.pMouseActive = 1.0 }
+        onExited:  { aurora.iMouseActive = 0.0; root.pMouseActive = 0.0 }
     }
 }

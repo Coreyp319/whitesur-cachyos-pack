@@ -11,7 +11,7 @@
       <default>0</default>
     </entry>
     <entry name="Style" type="Int">
-      <label>Base look (0 Flow, 1 Hills, 2 Silk curtains, 3 Caustics, 4 Ink in water, 5 Laserwave, 6 Vaporwave, 7 Cyberpunk)</label>
+      <label>Base look (0 Flow, 1 Hills, 2 Silk curtains, 3 Caustics, 4 Ink in water, 5 Laserwave, 6 Vaporwave, 7 Cyberpunk, 8 Liquid fluid sim)</label>
       <default>0</default>
     </entry>
     <entry name="Intensity" type="Double">

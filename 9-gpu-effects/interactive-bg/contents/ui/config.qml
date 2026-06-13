@@ -48,7 +48,8 @@ Kirigami.FormLayout {
         Kirigami.FormData.label: i18n("Style:")
         model: [i18n("Flow"), i18n("Hills"),
                 i18n("Silk curtains"), i18n("Caustics"), i18n("Ink in water"),
-                i18n("Laserwave"), i18n("Vaporwave"), i18n("Cyberpunk")]
+                i18n("Laserwave"), i18n("Vaporwave"), i18n("Cyberpunk"),
+                i18n("Liquid (fluid sim)")]
 
         // Per-style presets: snap the motion-character sliders to values tuned for
         // each look — Hills/Ink want a slow drift, Caustics a touch quicker shimmer,
@@ -57,8 +58,8 @@ Kirigami.FormLayout {
         // Caustics·Ink·Laserwave·Vaporwave·Cyberpunk. Uses onActivated (a USER pick) —
         // NOT onCurrentIndexChanged — so opening the dialog or loading saved config
         // never overwrites your tweaks.
-        readonly property var speedPreset:     [1.00, 0.60, 0.80, 1.10, 0.70, 1.00, 0.70, 1.00]
-        readonly property var intensityPreset: [1.00, 1.00, 1.15, 0.95, 1.00, 1.10, 1.00, 1.10]
+        readonly property var speedPreset:     [1.00, 0.60, 0.80, 1.10, 0.70, 1.00, 0.70, 1.00, 0.85]
+        readonly property var intensityPreset: [1.00, 1.00, 1.15, 0.95, 1.00, 1.10, 1.00, 1.10, 1.00]
         onActivated: {
             speedSlider.value     = styleBox.speedPreset[styleBox.currentIndex]
             intensitySlider.value = styleBox.intensityPreset[styleBox.currentIndex]

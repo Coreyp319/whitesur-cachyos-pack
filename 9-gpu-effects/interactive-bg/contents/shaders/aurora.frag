@@ -58,6 +58,10 @@ layout(std140, binding = 0) uniform buf {
     float uBeat;            // 0..1 transient pulse, decays fast (a ripple trigger)
 };
 
+// Persistent reactive feedback field (react.frag): r excitation (cursor trails,
+// window wakes, beat bursts) · g music throb · b expanding beat ripple.
+layout(binding = 1) uniform sampler2D reactTex;
+
 // ---- value noise + fbm ----------------------------------------------------
 float hash(vec2 p) {
     p = fract(p * vec2(123.34, 345.45));
@@ -277,6 +281,141 @@ vec2 windowFlow(vec2 p, vec2 baseV, float t) {
     return V;
 }
 
+// ============ Cyberpunk: raymarched foggy neon city ==========================
+// Real 3D, not 2D cut-outs. A grid of towers recedes into GENUINE distance-fog over a
+// wet reflective street, lit only by emissive neon windows. True perspective + fog give
+// the cinematic depth a flat skyline can't fake. The camera drifts slowly forward. y is
+// up, ground at y=0; colour comes only from the palette (c0/c1 night+haze, c2..c4 neon).
+float sdBox3(vec3 p, vec3 b) {
+    vec3 d = abs(p) - b;
+    return length(max(d, 0.0)) + min(max(d.x, max(d.y, d.z)), 0.0);
+}
+// distance to ground + a grid of towers (streets between). Heights skewed so a few
+// towers loom tall over many short blocks.
+float mapCity(vec3 p) {
+    float d = p.y;                                   // ground plane
+    const float G = 3.0;
+    vec2  id = floor(p.xz / G);
+    vec3  q  = p; q.xz = mod(p.xz + 0.5 * G, G) - 0.5 * G;
+    float rnd = hash(id);
+    float h   = 1.0 + 9.5 * rnd * rnd;               // most short, a few tall
+    float w   = 0.60 + 0.55 * hash(id + 3.1);        // footprint half-width
+    float box = sdBox3(vec3(q.x, p.y - h * 0.5, q.z), vec3(w, h * 0.5, w));
+    return min(d, box);
+}
+vec3 cityNormal(vec3 p) {
+    vec2 e = vec2(0.012, 0.0);
+    return normalize(vec3(mapCity(p + e.xyy) - mapCity(p - e.xyy),
+                          mapCity(p + e.yxy) - mapCity(p - e.yxy),
+                          mapCity(p + e.yyx) - mapCity(p - e.yyx)));
+}
+// emissive neon at a building point: a window grid on the lit face, SELECTIVELY lit so
+// the city reads as pools of light in the dark. Skips roofs/ground (n.y up).
+vec3 cityEmission(vec3 p, vec3 n, vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4) {
+    if (n.y > 0.5) return vec3(0.0);
+    const float G = 3.0;
+    vec2  id = floor(p.xz / G);
+    vec3  q  = p; q.xz = mod(p.xz + 0.5 * G, G) - 0.5 * G;
+    float u  = (abs(n.x) > abs(n.z)) ? q.z : q.x;    // horizontal coord along the lit face
+    float gu = abs(fract(u   / 0.16) - 0.5);
+    float gv = abs(fract(p.y / 0.20) - 0.5);
+    float pane = smoothstep(0.40, 0.20, gu) * smoothstep(0.42, 0.22, gv);   // window panes
+    float lit  = step(0.48, hash(vec2(floor(u / 0.16), floor(p.y / 0.20)) + id * 7.0));
+    float towerLit = mix(0.05, 1.0, step(0.42, hash(id + 11.0)));           // pools of light
+    vec3  nc = ramp(0.42 + 0.50 * hash(id + 5.0), c0, c1, c2, c3, c4);
+    return nc * pane * lit * towerLit;
+}
+vec3 skyDome(vec3 rd, vec3 c0, vec3 c2, vec3 c3, vec3 c4, vec3 fogCol) {
+    float up = clamp(rd.y, 0.0, 1.0);
+    vec3  col = mix(fogCol, c0 * 0.35, pow(up, 0.45));      // hazy horizon -> deep top
+    vec3  md  = normalize(vec3(0.32, 0.22, 1.0));          // moon direction
+    float dm  = max(dot(rd, md), 0.0);
+    col += mix(c3, c4, 0.40) * (pow(dm, 350.0) * 0.9 + pow(dm, 6.0) * 0.18);  // disc + halo
+    return col;
+}
+vec3 cyberpunkScene(vec2 pp, float t, vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4, out float bright) {
+    vec3 fogCol = mix(c1, c2, 0.42);
+    // camera: elevated, looking out across the rooftops to a foggy horizon (a skyline,
+    //         not a canyon), drifting slowly forward
+    vec3 ro = vec3(0.0, 9.0, t * 1.1);
+    vec3 ta = ro + vec3(0.0, -1.0, 8.0);
+    vec3 fw = normalize(ta - ro);
+    vec3 rt = normalize(cross(vec3(0.0, 1.0, 0.0), fw));
+    vec3 uo = cross(fw, rt);
+    vec3 rd = normalize(fw * 1.7 + rt * pp.x * 1.7 - uo * pp.y * 1.7);  // pp.y is screen-down
+
+    // ---- primary march ----
+    float dist = 0.0; int hit = 0; vec3 pos = ro;
+    for (int i = 0; i < 80; i++) {
+        pos = ro + rd * dist;
+        float dd = mapCity(pos);
+        if (dd < 0.0025 * dist + 0.0012) { hit = 1; break; }
+        dist += dd * 0.85;                                  // understep: repetition safety
+        if (dist > 62.0) break;                             // fog saturates here — no point marching further
+    }
+
+    vec3 col;
+    if (hit == 1) {
+        vec3 n = cityNormal(pos);
+        if (n.y > 0.6 && pos.y < 0.15) {
+            // ---- wet street: reflect (with a wobbling ripple normal), march again ----
+            vec3 gn = normalize(vec3(0.07 * (fbm(pos.xz * 2.0 + t * 0.5) - 0.5),
+                                     1.0,
+                                     0.07 * (fbm(pos.xz * 2.0 + 5.0) - 0.5)));
+            vec3 rr = reflect(rd, gn);
+            vec3 rp = pos + gn * 0.02;
+            float rdist = 0.0; int rhit = 0; vec3 rpos = rp;
+            for (int j = 0; j < 40; j++) {
+                rpos = rp + rr * rdist;
+                float dd = mapCity(rpos);
+                if (dd < 0.004 * rdist + 0.002) { rhit = 1; break; }
+                rdist += dd * 0.85;
+                if (rdist > 40.0) break;
+            }
+            vec3 rcol = (rhit == 1)
+                ? c0 * 0.10 + cityEmission(rpos, cityNormal(rpos), c0, c1, c2, c3, c4) * 1.4
+                : skyDome(rr, c0, c2, c3, c4, fogCol);
+            rcol = mix(rcol, fogCol, 1.0 - exp(-rdist * 0.06));
+            col  = mix(c0 * 0.16, rcol, 0.60);                  // dark wet asphalt + reflection
+        } else {
+            col = c0 * 0.09 + cityEmission(pos, n, c0, c1, c2, c3, c4) * 1.5;  // dark body + neon
+        }
+        col = mix(col, fogCol, 1.0 - exp(-dist * 0.052));       // distance fog (thick — dissolve the horizon)
+    } else {
+        col = skyDome(rd, c0, c2, c3, c4, fogCol);
+    }
+
+    bright = clamp(dot(col, vec3(0.35)), 0.0, 1.0);
+    // low-key filmic grade: soft rolloff so neon blooms, S-curve to deepen the blacks
+    col = col / (1.0 + col * 0.5);
+    col = mix(col, col * col * (3.0 - 2.0 * col), 0.30);
+    return col;
+}
+
+// palm-tree silhouette (Vaporwave): a leaning trunk + a fountain of ~6 fronds that
+// arc up-and-out from the crown and droop at the tips. Returns a 0..1 coverage mask;
+// the style paints it as a dark cut-out. y is down, so "up" is the -y direction.
+float palmAt(vec2 p, float px, float baseY, float ht) {
+    vec2  cc    = vec2(px, baseY - ht);              // crown centre, up from the horizon
+    float lean  = 0.05 * (baseY - p.y);              // trunk leans in a little as it rises
+    float trunk = smoothstep(0.011, 0.0, abs(p.x - (px + lean)))
+                * step(p.y, baseY) * step(cc.y, p.y);
+    vec2  c = p - cc;                                // crown-local
+    float fronds = 0.0;
+    for (int f = 0; f < 6; f++) {
+        float a = mix(-2.70, -0.45, float(f) / 5.0); // span the upper arc, left → right
+        vec2  dir = vec2(cos(a), sin(a));            // sin(a)<0 ⇒ heads upward
+        for (int s = 1; s <= 5; s++) {
+            float u   = float(s) / 5.0;
+            vec2  pos = dir * (u * 0.16);
+            pos.y += 0.10 * u * u;                   // tips droop back down
+            float w   = 0.012 * (1.0 - 0.6 * u);     // fronds taper to a point
+            fronds = max(fronds, smoothstep(w, 0.0, length(c - pos)));
+        }
+    }
+    return clamp(max(trunk, fronds), 0.0, 1.0);
+}
+
 vec3 baseLook(int style, vec2 warpP, vec2 p, float t,
               vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4,
               vec4 mus, out float shade)
@@ -466,16 +605,18 @@ vec3 baseLook(int style, vec2 warpP, vec2 p, float t,
     }
 
     if (style == 6) {
-        // --- Vaporwave: the iconic perspective CHECKERBOARD floor under a big soft
-        //     sun, wrapped in DREAMY ATMOSPHERE — pastel cloud bands drifting in the
-        //     sky, the sun mirrored on the floor, a hazy horizon, and a soft vignette.
-        //     Rounder and softer than Laserwave (no slits, no scanlines). Palette only.
+        // --- Vaporwave: the iconic perspective CHECKERBOARD floor + reflection under
+        //     the slitted "Floral Shoppe" sun (with chromatic-aberration fringing); a
+        //     multi-stop PASTEL sky (warm pink horizon → cool lavender/teal top) with
+        //     drifting clouds and palm-tree silhouettes; finished with VHS scanlines, a
+        //     drifting tracking band, and a soft vignette. Pastel pink/teal sing on the
+        //     Vaporwave palette but it's palette-agnostic. shade = sun/floor/neon energy.
         const float HOR = -0.02;
-        vec2  sc   = vec2(0.0, HOR - 0.24);
-        float Rs   = 0.26;
+        vec2  sc = vec2(0.0, HOR - 0.24);
+        float Rs = 0.26;
         vec3  col6;
         float shd;
-        if (p.y > HOR) {                                  // ---- checkerboard floor ----
+        if (p.y > HOR) {                                  // ---- checkerboard floor + reflection ----
             float d   = (p.y - HOR) + 0.015;
             float zl  = 0.16 / d + t * (0.9 + 0.6 * mBass);
             float xl  = warpP.x / d * 1.1;
@@ -487,101 +628,63 @@ vec3 baseLook(int style, vec2 warpP, vec2 p, float t,
             vec3 floorCol = mix(mix(c0, c1, 0.5), c2, chk);
             vec3 seamCol  = ramp(0.7, c0, c1, c2, c3, c4);
             floorCol = mix(floorCol, seamCol, seam * fade * 0.6);
-            // the sun mirrored on the floor (a wavering glow down the centre aisle)
             float refl = exp(-abs(warpP.x) * 2.2) * smoothstep(0.0, 0.45, p.y - HOR);
-            floorCol += mix(c3, c4, 0.5) * refl * 0.20;
+            floorCol += mix(c3, c4, 0.5) * refl * 0.22;   // sun mirrored down the centre aisle
             col6 = floorCol;
             shd  = max((0.3 + 0.4 * chk) * fade + seam * 0.4, refl * 0.6);
-        } else {                                          // ---- soft sun + clouds ----
-            float up     = smoothstep(HOR, HOR - 0.8, p.y);
-            vec3  skyCol = mix(c1, c0, up);
-            // pastel cloud bands drifting slowly across the sky
-            float cl = fbm(vec2(p.x * 1.6 - t * 0.12, p.y * 3.0 + 2.0));
-            skyCol = mix(skyCol, mix(c3, c4, 0.5), smoothstep(0.5, 0.92, cl) * 0.22);
-            float sd     = length(p - sc);
-            float sy     = clamp((p.y - (sc.y - Rs)) / (2.0 * Rs), 0.0, 1.0);
-            float disc   = smoothstep(Rs, Rs - 0.06, sd); // soft edge, no slits
-            float halo   = exp(-sd * 4.6);
-            // pink-dominant sun (c3) with a c4 crown — keeps it from blooming to
-            // flat white when the palette's highlight stop is a pale pastel.
-            vec3  sunCol = mix(c3, c4, smoothstep(0.0, 0.55, 1.0 - sy));
-            col6  = mix(skyCol, sunCol, disc);
-            col6 += sunCol * halo * 0.22;
-            shd = max(disc, halo * 0.5);
+        } else {                                          // ---- pastel sky + slitted CA sun + clouds + palms ----
+            float up = smoothstep(HOR, HOR - 0.85, p.y);  // 0 horizon → 1 top
+            // multi-stop pastel gradient: warm pink/peach at the horizon → cool lavender/teal up top
+            vec3 skyCol = mix(mix(c3, c4, 0.35), mix(c2, c1, 0.45), up);
+            float cl = fbm(vec2(p.x * 1.6 - t * 0.12, p.y * 3.0 + 2.0));   // drifting clouds
+            skyCol = mix(skyCol, mix(c4, c3, 0.5), smoothstep(0.55, 0.95, cl) * 0.20);
+            // Floral Shoppe sun: c3→c4 vertical gradient, horizontal slits in the lower
+            // half, with chromatic-aberration fringing (per-channel disc offset)
+            float sy   = clamp((p.y - (sc.y - Rs)) / (2.0 * Rs), 0.0, 1.0);
+            float slit = smoothstep(0.42, 0.50, fract(sy * 7.0));
+            float cut  = mix(1.0, slit, smoothstep(0.45, 1.0, sy));
+            float ca   = 0.007;
+            float mR = smoothstep(Rs, Rs - 0.05, length((p - sc) - vec2(ca, 0.0))) * cut;
+            float mG = smoothstep(Rs, Rs - 0.05, length( p - sc))                  * cut;
+            float mB = smoothstep(Rs, Rs - 0.05, length((p - sc) + vec2(ca, 0.0))) * cut;
+            vec3 sunCol = mix(c3, c4, smoothstep(0.0, 0.55, 1.0 - sy));
+            col6 = skyCol;
+            col6.r = mix(col6.r, sunCol.r, mR);
+            col6.g = mix(col6.g, sunCol.g, mG);
+            col6.b = mix(col6.b, sunCol.b, mB);
+            col6 += sunCol * exp(-length(p - sc) * 4.6) * 0.20;            // halo
+            // palm silhouettes flanking the sun on the horizon
+            float palm = max(palmAt(p, -0.66, HOR, 0.34), palmAt(p, 0.70, HOR, 0.30));
+            col6 = mix(col6, c0 * 0.5, palm);
+            shd = max(max(max(mR, mG), mB), palm * 0.15);
         }
         // ---- shared atmosphere ----
         float hz = exp(-abs(p.y - HOR) * 7.0);             // hazy pastel horizon band
-        col6 += mix(c3, c4, 0.5) * hz * 0.25;
+        col6 += mix(c3, c4, 0.5) * hz * 0.22;
         shd = max(shd, hz * 0.4);
-        col6 *= 1.0 - 0.18 * dot(p, p);                    // soft vignette for dreaminess
+        col6 *= 1.0 - 0.05 * (0.5 + 0.5 * sin(p.y * 220.0));   // VHS scanlines
+        float band = smoothstep(0.05, 0.0, abs(fract((p.y + 0.5) - t * 0.08) - 0.5));
+        col6 += mix(c3, c4, 0.5) * band * 0.05;            // drifting VHS tracking band
+        col6 *= 1.0 - 0.18 * dot(p, p);                    // soft vignette
         shade = clamp(shd, 0.0, 1.0);
         return col6;
     }
 
     if (style == 7) {
-        // --- Cyberpunk: a layered neon skyline drowning in smog. THREE building ranks
-        //     recede into magenta/cyan light-pollution haze — far ranks wash toward the
-        //     smog colour (atmospheric perspective), the near rank is near-black with
-        //     dense lit windows. A glow band sits on the skyline; rain falls; a wet-
-        //     street sheen pools at the bottom. Palette stops only. shade = neon energy.
-        // ---- smoggy sky: darkest up top, glowing toward the skyline ----
-        float toHor = smoothstep(-0.5, 0.16, p.y);
-        vec3  col7  = mix(c0, mix(c1, c2, 0.45), toHor);
-        float smog  = fbm(vec2(p.x * 1.3 + t * 0.12, p.y * 1.7 - t * 0.04));
-        col7 += mix(c2, c3, 0.5) * smog * smog * 0.12 * toHor;
-        col7 += mix(c3, c2, 0.4) * exp(-abs(p.y - 0.10) * 3.2) * 0.22;   // glow on the skyline
-        float sh = toHor * 0.22;
-
-        // ---- building ranks, far (0) -> near (2): drawn back-to-front ----
-        for (int L = 0; L < 3; L++) {
-            float fl     = float(L);
-            float depth  = 1.0 - fl * 0.5;                // 1 far .. 0 near
-            float scale  = 4.5 + fl * 3.5;                // near rank = more, thinner towers
-            float amp    = 0.40 - fl * 0.07;              // far rank spreads tallest
-            float ox     = fl * 13.7;                     // decorrelate the ranks
-            float bx     = warpP.x * scale + ox;
-            float ci     = floor(bx);
-            float fx     = fract(bx);
-            float h      = hash(vec2(ci, 3.1 + fl));
-            float skyTop = 0.16 - amp;                    // highest a tower in this rank reaches
-            float topY   = skyTop + (1.0 - h) * amp;      // this tower's top edge
-            float present = step(0.12, h);                // a few columns are streets (no tower)
-            if (present > 0.5 && p.y > topY) {
-                float seam = smoothstep(0.0, 0.025, fx) * smoothstep(1.0, 0.975, fx);
-                // far towers wash toward the smog/glow colour (atmospheric perspective)
-                vec3 body = mix(mix(c0, c1, 0.25), mix(c1, c2, 0.5), depth);
-                col7 = mix(col7, body, seam);
-                sh   = mix(sh, 0.08 + 0.06 * depth, seam);
-                if (L >= 1) {                             // lit windows on mid + near ranks
-                    float wc  = floor(fx * 5.0);
-                    float wr  = floor((p.y - topY) * 24.0);
-                    float gx  = fract(fx * 5.0);
-                    float gy  = fract((p.y - topY) * 24.0);
-                    float lit = step(0.52, hash(vec2(wc + ci * 5.0, wr * 1.7 + fl)));
-                    float win = lit * step(0.22, gx) * step(gx, 0.78)
-                                    * step(0.22, gy) * step(gy, 0.78) * seam;
-                    vec3 wcol = ramp(0.5 + 0.45 * hash(vec2(wc + ci, wr)), c0, c1, c2, c3, c4);
-                    col7 = mix(col7, wcol, win);
-                    sh   = max(sh, win);
-                }
-            }
-        }
-
-        // ---- rain: thin fast streaks in scattered columns (time-driven) ----
-        float rcol   = floor(warpP.x * 110.0);
-        float ry     = fract(p.y * 2.0 + t * (3.0 + 2.0 * hash(vec2(rcol, 4.0))) * 6.0
-                             + hash(vec2(rcol, 8.0)) * 10.0);
-        float rain   = smoothstep(0.0, 0.03, ry) * smoothstep(0.16, 0.03, ry)
-                       * step(0.66, hash(vec2(rcol, 1.0))) * 0.4;
+        // --- Cyberpunk: a raymarched 3D foggy neon city (cyberpunkScene) — real
+        //     perspective, volumetric distance-fog, emissive neon towers, a wet
+        //     reflective street, a hazy moon. Soft rain drifts over the top. Uses the
+        //     UNWARPED point p (warping a 3D camera reads as wobble). Palette only.
+        float bsc;
+        vec3  col7 = cyberpunkScene(p, t, c0, c1, c2, c3, c4, bsc);
+        // soft rain over everything
+        float rcol = floor(p.x * 130.0);
+        float ry   = fract(p.y * 1.6 + t * (3.0 + 2.0 * hash(vec2(rcol, 4.0))) * 7.0
+                           + hash(vec2(rcol, 8.0)) * 10.0);
+        float rain = smoothstep(0.0, 0.02, ry) * smoothstep(0.12, 0.02, ry)
+                     * step(0.66, hash(vec2(rcol, 1.0))) * 0.22;
         col7 += mix(c3, c4, 0.4) * rain;
-        sh = max(sh, rain * 0.4);
-
-        // ---- wet-street sheen pooling at the very bottom (bass swells it) ----
-        float street = smoothstep(0.36, 0.5, p.y);
-        col7 += mix(c2, c3, 0.5) * street * 0.16 * (1.0 + 0.4 * mBass);
-        sh = max(sh, street * 0.28);
-
-        shade = clamp(sh, 0.0, 1.0);
+        shade = clamp(max(bsc * 0.5, rain * 0.3), 0.0, 1.0);
         return col7;
     }
 
@@ -717,6 +820,18 @@ void main() {
     //      flutter that used to live here read as high-frequency jitter) -------
     warpP *= 1.0 + 0.04 * mBass;
 
+    // ---- persistent reactive feedback (react.frag): cursor trails, music ripples
+    //      and window wakes that LINGER and flow after the input stops. Sampled in
+    //      screen-uv; its gradient bends the shared flow so excitation pushes the
+    //      field outward (ripples/wakes), and the field itself glows below.
+    vec2  ruv = qt_TexCoord0;
+    vec2  rpx = 1.0 / iResolution;
+    vec3  rx  = texture(reactTex, ruv).rgb;     // r excitation · g music · b ripple
+    float exc = rx.r;
+    vec2  exGrad = vec2(texture(reactTex, ruv + vec2(rpx.x, 0.0)).r - texture(reactTex, ruv - vec2(rpx.x, 0.0)).r,
+                        texture(reactTex, ruv + vec2(0.0, rpx.y)).r - texture(reactTex, ruv - vec2(0.0, rpx.y)).r);
+    warpP += exGrad * (0.5 + 0.5 * energy);
+
     vec3 c0, c1, c2, c3, c4;
     palette(uTheme, c0, c1, c2, c3, c4);
     if (uTheme == 9) {   // user's custom palette overrides the preset
@@ -806,6 +921,14 @@ void main() {
         //  fast warp were the main source of "chaos"; treble no longer drives any
         //  motion, so the scene stays a slow breathing field)
     }
+
+    // ---- persistent reactive feedback glow: the lingering trails / ripples /
+    //      wakes from react.frag, drawn in the same accent palette so they read as
+    //      the aurora's own light. This is the "wow" layer — it flows on AFTER the
+    //      cursor stops, beats ripple outward, and window wakes drift and fade.
+    light += mix(accentWarm, accentCool, 0.4) * exc * (0.30 + 0.30 * shade);
+    light += accentCool * rx.b * 0.5;          // expanding beat ripple ring
+    col   *= 1.0 + rx.g * 0.7;                  // music level/bass throb swells the field
 
     // screen-blend the shared light so layered responses combine gracefully
     col = col + light * (1.0 - col);

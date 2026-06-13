@@ -21,10 +21,13 @@ QSB=""
 for c in qsb /usr/lib/qt6/bin/qsb; do command -v "$c" >/dev/null 2>&1 && { QSB="$c"; break; }; done
 [ -x /usr/lib/qt6/bin/qsb ] && QSB="${QSB:-/usr/lib/qt6/bin/qsb}"
 if [ -n "$QSB" ]; then
-  "$QSB" --qt6 -o "$HERE/contents/shaders/aurora.frag.qsb" "$HERE/contents/shaders/aurora.frag" \
-    && ok "shader compiled (qsb)" || warn "qsb failed — will use the prebuilt .qsb if present"
+  # aurora + the Liquid-style fluid passes (velocity/pressure/dye/display)
+  for f in "$HERE"/contents/shaders/*.frag; do
+    "$QSB" --qt6 -o "$f.qsb" "$f" \
+      && ok "shader compiled: $(basename "$f").qsb" || warn "qsb failed for $(basename "$f") — using prebuilt if present"
+  done
 else
-  warn "qsb not found (install qt6-shadertools to rebuild) — using prebuilt .qsb"
+  warn "qsb not found (install qt6-shadertools to rebuild) — using prebuilt .qsb files"
 fi
 [ -f "$HERE/contents/shaders/aurora.frag.qsb" ] || { warn "no compiled shader available — aborting"; exit 1; }
 
