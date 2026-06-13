@@ -79,8 +79,18 @@ QQC2.Slider {
             anchors.fill: parent
             radius: width / 2
             color: Kirigami.Theme.backgroundColor   // adapts to the dialog scheme
-            border.width: 1
-            border.color: Qt.rgba(0, 0, 0, 0.10)
+
+            // On a dark scheme the knob fill is dark and the black drop-shadow
+            // below can't separate it from the accent fill / groove, so the
+            // handle vanishes. Give it a luminance-adaptive rim: a light edge
+            // on dark schemes (keeps the outline >=3:1 against the accent
+            // fill), the original subtle dark edge on light ones.
+            readonly property bool onDark: Kirigami.Theme.backgroundColor.hslLightness < 0.5
+            border.width: onDark ? 1.5 : 1
+            border.color: onDark
+                ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g,
+                          Kirigami.Theme.textColor.b, 0.75)
+                : Qt.rgba(0, 0, 0, 0.10)
 
             // engaged = being hovered / pressed / keyboard-focused
             readonly property bool active: control.pressed || control.hovered || control.visualFocus
