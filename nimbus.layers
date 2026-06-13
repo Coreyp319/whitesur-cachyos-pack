@@ -1,0 +1,17 @@
+# Nimbus pack — layer registry. Read by ./nimbus (and, later, install/revert/update).
+# Pipe-delimited; fields are trimmed; lines starting with # and blanks are ignored.
+# Columns:  id | dir | sudo | install | revert | title
+#   install/revert are the per-layer entrypoints (run from the layer dir);
+#   "-" means none (e.g. layer 1 is one-way — no clean revert script).
+#
+# id | dir                  | sudo | install                    | revert    | title
+1    | 1-base               | yes  | nimbus-cachyos-macos.sh -y | -         | macOS desktop base — theme, dock, blur, animations, Spotlight, light/dark toggle
+2    | 2-settings-refine    | no   | install.sh                 | revert.sh | Monochrome System Settings icons + NimbusRefined Kvantum fork
+3    | 3-krunner-finder     | yes  | install.sh                 | revert.sh | Two-line KRunner rows + Ask-Claude/Hermes/web-search runner
+4    | 4-login-lock         | yes  | install.sh                 | revert.sh | Big Sur SDDM login + lock screens
+5    | 5-system-qol         | yes  | install.sh -y              | revert.sh | paccache, Flatpak/Flathub, fish tooling, Timeshift
+6    | 6-local-ai           | yes  | install.sh -y              | revert.sh | On-GPU Ollama + Hermes/Gemma/Qwen Modelfiles
+7    | 7-notifications      | yes  | install.sh -y              | revert.sh | Apple-style swaync toasts + center, scheme-synced
+8    | 8-dolphin-quicklook  | no   | install.sh                 | revert.sh | Space previews the selection via kiview (Quick Look)
+9    | 9-gpu-effects        | no   | install.sh -y              | revert.sh | Glass blur fork + GLSL shaders + interactive aurora wallpaper
+10   | 10-shader-engine     | no   | install.sh                 | revert.sh | Standalone bevy/wgpu GPU fluid engine (Nimbus Flux)

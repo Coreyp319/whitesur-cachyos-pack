@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+# nimbus — orchestrator for the Nimbus CachyOS pack.
+#
+# Phase 1 (this slice): list / status / doctor. install/revert/update are stubbed
+# and still live in the per-layer scripts. The CLI resolves its own location, so
+# the same binary works from a git checkout or from /usr/share/nimbus later — no
+# logic changes needed to package it.
+set -uo pipefail
+
+SELF="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+NIMBUS_ROOT="$(cd "$(dirname "$SELF")" && pwd)"
+MANIFEST="$NIMBUS_ROOT/nimbus.layers"
+STATE="${NIMBUS_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/nimbus/installed.tsv}"
+
+b=$'\033[1m'; d=$'\033[2m'; g=$'\033[32m'; y=$'\033[33m'; r=$'\033[31m'; x=$'\033[0m'
+
+[ -f "$MANIFEST" ] || { echo "nimbus: manifest not found: $MANIFEST" >&2; exit 1; }
+
+trim(){ local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }
+
+# Parse the manifest into parallel arrays.
+ids=(); dirs=(); sudos=(); installs=(); reverts=(); titles=()
+while IFS='|' read -r id dir sudo install revert title; do
+  id="$(trim "$id")"; [ -z "$id" ] && continue
+  case "$id" in \#*) continue ;; esac
+  ids+=("$id"); dirs+=("$(trim "$dir")"); sudos+=("$(trim "$sudo")")
+  installs+=("$(trim "$install")"); reverts+=("$(trim "$revert")"); titles+=("$(trim "$title")")
+done < "$MANIFEST"
+
+layer_index(){ local want="$1" i; for i in "${!ids[@]}"; do [ "${ids[$i]}" = "$want" ] && { printf '%s' "$i"; return 0; }; done; return 1; }
+
+# --- install-state: a TSV of  id <TAB> sha <TAB> iso8601  ------------------
+state_sha(){ git -C "$NIMBUS_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown; }
+state_has(){ [ -f "$STATE" ] && grep -q "^$1	" "$STATE"; }
+state_get(){ [ -f "$STATE" ] && awk -F'\t' -v i="$1" '$1==i{print $2; exit}' "$STATE"; }
+state_ids(){ [ -f "$STATE" ] && awk -F'\t' 'NF{print $1}' "$STATE"; }
+state_record(){ # $1=id
+  mkdir -p "$(dirname "$STATE")"; local tmp; tmp="$(mktemp)"
+  { [ -f "$STATE" ] && grep -v "^$1	" "$STATE"; printf '%s\t%s\t%s\n' "$1" "$(state_sha)" "$(date -Iseconds)"; } > "$tmp" 2>/dev/null
+  mv "$tmp" "$STATE"
+}
+state_remove(){ # $1=id
+  [ -f "$STATE" ] || return 0; local tmp; tmp="$(mktemp)"
+  grep -v "^$1	" "$STATE" > "$tmp" 2>/dev/null || true; mv "$tmp" "$STATE"
+}
+
+# Resolve an arg list to layer indices. Accepts ids, "all", or none(->all).
+resolve_targets(){
+  local a out=()
+  if [ $# -eq 0 ] || [ "$1" = all ]; then printf '%s\n' "${!ids[@]}"; return; fi
+  for a in "$@"; do
+    local i; if i=$(layer_index "$a"); then out+=("$i"); else echo "nimbus: unknown layer '$a'" >&2; fi
+  done
+  [ ${#out[@]} -gt 0 ] && printf '%s\n' "${out[@]}"
+}
+
+# Run a layer's install/revert command from inside its dir.
+# $1=action(install|revert) $2=index $3=dry(1/0) $4..=extra args
+run_layer(){
+  local action="$1" i="$2" dry="$3"; shift 3
+  local dir="${dirs[$i]}" cmd
+  case "$action" in install) cmd="${installs[$i]}" ;; revert) cmd="${reverts[$i]}" ;; esac
+  if [ "$cmd" = "-" ] || [ -z "$cmd" ]; then
+    printf '  %s–%s layer %s has no %s step (skipped)\n' "$d" "$x" "${ids[$i]}" "$action"; return 0
+  fi
+  if [ "$dry" = 1 ]; then
+    printf '  %swould run:%s (cd %s && bash %s %s)\n' "$d" "$x" "$dir" "$cmd" "$*"; return 0
+  fi
+  printf '\n%s:: %s — %s%s\n' "$b" "${ids[$i]} ${dir}" "$action" "$x"
+  ( cd "$NIMBUS_ROOT/$dir" && bash $cmd "$@" )   # word-split $cmd intentionally (script + flags)
+}
+
+cmd_list(){
+  local i
+  for i in "${!ids[@]}"; do printf '  %-2s  %-20s %s\n' "${ids[$i]}" "${dirs[$i]}" "${titles[$i]}"; done
+}
+
+cmd_status(){
+  printf '%sNimbus layers%s  %s(%s)%s\n' "$b" "$x" "$d" "${STATE/#$HOME/\~}" "$x"
+  local i st label
+  for i in "${!ids[@]}"; do
+    if [ -f "$NIMBUS_ROOT/${dirs[$i]}/doctor.sh" ]; then
+      NIMBUS_QUIET=1 bash "$NIMBUS_ROOT/${dirs[$i]}/doctor.sh" >/dev/null 2>&1; st=$?
+    else st=100; fi
+    case $st in
+      0)   label="${g}[  ok  ]${x}" ;;
+      1)   label="${y}[ drift]${x}" ;;
+      10)  label="${d}[  --  ]${x}" ;;
+      100) label="${d}[  ?   ]${x}" ;;
+      *)   label="${r}[ err  ]${x}" ;;
+    esac
+    local tracked note=""; tracked="$(state_get "${ids[$i]}" 2>/dev/null || true)"
+    [ -n "$tracked" ] && note=" ${d}· tracked @${tracked}${x}"
+    printf '  %s  %-2s %-20s %s%s%s%s\n' "$label" "${ids[$i]}" "${dirs[$i]}" "$d" "${titles[$i]}" "$x" "$note"
+  done
+  printf '\n  %sok%s healthy   %sdrift%s needs attention   %s--%s not installed   %s?%s no check yet\n' \
+    "$g" "$x" "$y" "$x" "$d" "$x" "$d" "$x"
+  printf '  %snimbus doctor [id…]%s for detail   %snimbus update%s to re-assert installed layers\n' "$b" "$x" "$b" "$x"
+}
+
+cmd_doctor(){
+  local targets=("$@") want i d_path
+  [ ${#targets[@]} -eq 0 ] && targets=("${ids[@]}")
+  for want in "${targets[@]}"; do
+    if ! i=$(layer_index "$want"); then echo "nimbus: unknown layer '$want'" >&2; continue; fi
+    printf '\n%s== %-2s %s ==%s\n' "$b" "${ids[$i]}" "${dirs[$i]}" "$x"
+    d_path="$NIMBUS_ROOT/${dirs[$i]}/doctor.sh"
+    if [ -f "$d_path" ]; then bash "$d_path" || true
+    else printf '  %sno doctor check for this layer yet%s\n' "$d" "$x"; fi
+  done
+}
+
+# Flag parsing shared by install/revert/update. Sets DRY/YES; non-flags -> REST.
+DRY=0; YES=0; REST=()
+parse_flags(){ DRY=0; YES=0; REST=(); local a
+  for a in "$@"; do case "$a" in
+    -n|--dry-run) DRY=1 ;;
+    -y|--yes)     YES=1 ;;
+    *)            REST+=("$a") ;;
+  esac; done; }
+
+cmd_install(){
+  parse_flags "$@"
+  local interactive=0
+  [ ${#REST[@]} -eq 0 ] && [ "$YES" = 0 ] && interactive=1
+  local targets; mapfile -t targets < <(resolve_targets "${REST[@]}")
+  local i ran=0
+  for i in "${targets[@]}"; do
+    [ -n "$i" ] || continue
+    if [ "$interactive" = 1 ]; then
+      local sflag=""; [ "${sudos[$i]}" = yes ] && sflag=" ${d}(sudo)${x}"
+      printf '%sLayer %s%s — %s? [y/N] ' "$b" "${ids[$i]}" "$x" "${titles[$i]}${sflag}"
+      local ans; read -r ans </dev/tty 2>/dev/null || ans=n
+      case "$ans" in [yY]*) : ;; *) continue ;; esac
+    fi
+    if run_layer install "$i" "$DRY"; then
+      [ "$DRY" = 1 ] || state_record "${ids[$i]}"; ran=$((ran + 1))
+    else
+      printf '  %s! layer %s install reported issues%s\n' "$y" "${ids[$i]}" "$x"
+    fi
+  done
+  [ "$DRY" = 1 ] && printf '\n%s(dry run — nothing changed)%s\n' "$d" "$x"
+  printf '%sDone — %s layer(s) processed.%s\n' "$b" "$ran" "$x"
+}
+
+cmd_revert(){
+  parse_flags "$@"
+  local purge="" t out=()
+  for t in "${REST[@]}"; do [ "$t" = --purge ] && { purge=--purge; continue; }; out+=("$t"); done
+  REST=("${out[@]}")
+  # Bare `nimbus revert` is destructive over everything — require an explicit target.
+  if [ ${#REST[@]} -eq 0 ]; then
+    echo "nimbus: name layers to revert (or 'all'), e.g. nimbus revert 8   [--purge]" >&2; return 1
+  fi
+  local targets; mapfile -t targets < <(resolve_targets "${REST[@]}")
+  local i
+  for i in "${targets[@]}"; do
+    [ -n "$i" ] || continue
+    run_layer revert "$i" "$DRY" ${purge:+"$purge"} \
+      || printf '  %s! layer %s revert reported issues%s\n' "$y" "${ids[$i]}" "$x"
+    [ "$DRY" = 1 ] || state_remove "${ids[$i]}"
+  done
+  [ "$DRY" = 1 ] && printf '\n%s(dry run — nothing changed)%s\n' "$d" "$x"
+}
+
+cmd_update(){
+  parse_flags "$@"
+  local targets i id idx tlist=()
+  if [ ${#REST[@]} -gt 0 ]; then
+    mapfile -t targets < <(resolve_targets "${REST[@]}")
+  else
+    while IFS= read -r id; do idx=$(layer_index "$id") && tlist+=("$idx"); done < <(state_ids)
+    targets=("${tlist[@]}")
+  fi
+  if [ ${#targets[@]} -eq 0 ]; then
+    printf '%sNothing to update%s — no layers are tracked as installed.\n' "$b" "$x"
+    printf 'Install via %snimbus install%s so update knows what to re-assert, or name them: %snimbus update 7 8%s\n' "$b" "$x" "$b" "$x"
+    return
+  fi
+  printf '%sRe-asserting %s installed layer(s) (idempotent install)…%s\n' "$b" "${#targets[@]}" "$x"
+  for i in "${targets[@]}"; do
+    [ -n "$i" ] || continue
+    run_layer install "$i" "$DRY" || printf '  %s! layer %s reported issues%s\n' "$y" "${ids[$i]}" "$x"
+    [ "$DRY" = 1 ] || state_record "${ids[$i]}"
+  done
+  [ "$DRY" = 1 ] && printf '\n%s(dry run — nothing changed)%s\n' "$d" "$x"
+}
+
+cmd_help(){
+  cat <<EOF
+${b}nimbus${x} — Nimbus CachyOS pack orchestrator
+
+  ${b}nimbus list${x}                 list the layers
+  ${b}nimbus status${x}               one-line health per layer (runs each doctor check)
+  ${b}nimbus doctor${x} [id…]         detailed drift checks (all layers, or the given ids)
+
+  ${b}nimbus install${x} [id…|-y]     install layers (no args = interactive; -y = all; or name ids)
+  ${b}nimbus revert${x}  <id…|all>    revert layers (add ${b}--purge${x} to also delete files/packages)
+  ${b}nimbus update${x} [id…]         re-assert installed layers (idempotent) after a system update
+
+  Flags: ${b}-n${x}/${b}--dry-run${x} (print actions, change nothing)   ${b}-y${x}/${b}--yes${x} (non-interactive)
+
+Layer ids: $(printf '%s ' "${ids[@]}")
+EOF
+}
+
+case "${1:-help}" in
+  list)               shift; cmd_list ;;
+  status)             shift; cmd_status "$@" ;;
+  doctor)             shift; cmd_doctor "$@" ;;
+  install)            shift; cmd_install "$@" ;;
+  revert)             shift; cmd_revert "$@" ;;
+  update)             shift; cmd_update "$@" ;;
+  -h|--help|help)     cmd_help ;;
+  *) echo "nimbus: unknown command '$1'" >&2; cmd_help; exit 1 ;;
+esac
