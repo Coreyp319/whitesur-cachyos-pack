@@ -140,6 +140,14 @@ if ask "Interactive aurora wallpaper (cursor-reactive animated background)"; the
         warn "could not install python-numpy — the audio bridge needs it"
       bash "$HERE/interactive-bg/audio-apply.sh"
     fi
+
+    # Lock screen: drive kscreenlocker's greeter with the same aurora, mirroring
+    # the desktop settings (window/music reactivity forced off — the greeter is
+    # sandboxed and shows no windows). Opt-in; reversible via lockscreen-restore.sh
+    # (also torn down by restore.sh). No extra packages needed.
+    if ask "…and use the aurora on the lock screen too"; then
+      bash "$HERE/interactive-bg/lockscreen-apply.sh"
+    fi
   fi
 fi
 

@@ -55,6 +55,18 @@ kwin-script/                       KWin/Script package: watches windows, pushes
 aurora-bridge.py                   D-Bus daemon org.whitesur.Aurora → state file
 whitesur-aurora-bridge.service     systemd --user unit for the daemon
 windows-apply.sh / windows-restore.sh   install+enable / disable the bridge
+
+— music reactivity —
+aurora-audio-bridge.py             pw-cat monitor → numpy FFT → audio.json
+whitesur-aurora-audio.service      systemd --user unit for the audio bridge
+audio-apply.sh / audio-restore.sh       install+enable / disable the bridge
+
+— lock screen (opt-in) —
+lockscreen-apply.sh / lockscreen-restore.sh   mirror the desktop aurora onto
+                                     kscreenlocker's greeter / put it back. Forces
+                                     WindowReact=0 & MusicReact=0 and an explicit
+                                     light/dark (the greeter is sandboxed). Re-run
+                                     apply after changing desktop settings to re-sync.
 ```
 
 Build the shader by hand: `qsb --qt6 -o contents/shaders/aurora.frag.qsb contents/shaders/aurora.frag`

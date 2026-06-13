@@ -16,6 +16,8 @@ command -v qdbus6 >/dev/null 2>&1 || { warn "qdbus6 not found — nothing to do.
 # Tear down the window-reactivity bridge (KWin script + daemon) if it's installed.
 _HERE="$(cd "$(dirname "$0")" && pwd)"
 [ -f "$_HERE/windows-restore.sh" ] && bash "$_HERE/windows-restore.sh" "$PURGE" || true
+# Revert the lock screen too, if aurora was applied there.
+[ -f "$_HERE/lockscreen-restore.sh" ] && bash "$_HERE/lockscreen-restore.sh" || true
 
 # only act if the aurora is actually the active wallpaper
 CUR="$(qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript 'print(desktops()[0].wallpaperPlugin)' 2>/dev/null)"
