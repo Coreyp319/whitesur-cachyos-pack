@@ -1393,6 +1393,10 @@
        style="fill:#ffffff;color:#000"
        d="m 371,334 a 8,8 0 0 1 -8,8 8,8 0 0 1 -8,-8 8,8 0 0 1 8,-8 8,8 0 0 1 8,8 z"
        id="path473" />
+    <path
+       style="fill:none;stroke:#0860f2;stroke-width:1.5;opacity:0.9"
+       d="m 371,334 a 8,8 0 0 1 -8,8 8,8 0 0 1 -8,-8 8,8 0 0 1 8,-8 8,8 0 0 1 8,8 z"
+       id="slidercursor-focus-ring" />
   </g>
   <use
      width="100%"
@@ -1612,7 +1616,7 @@
      id="focus-top"
      transform="translate(90,571.5)">
     <path
-       style="fill-opacity:0"
+       style="fill:#0860f2;fill-opacity:0.9"
        d="m 90,109.5 h 20 v -2 H 90 Z"
        id="path739" />
     <g
@@ -1708,7 +1712,7 @@
     <path
        id="path4318"
        d="m 155,1092.5 c -4,0.011 -4,2.7501 -4,8.4998 h 4 z"
-       style="fill:#4d4d4d;fill-opacity:1"
+       style="fill:#0860f2;fill-opacity:1"
        inkscape:connector-curvature="0" />
   </g>
   <g
@@ -1723,7 +1727,7 @@
     <path
        id="path4324"
        d="m 151,1101 v 16.5 h 4 V 1101 Z"
-       style="fill:#4d4d4d;fill-opacity:1"
+       style="fill:#0860f2;fill-opacity:1"
        inkscape:connector-curvature="0" />
   </g>
   <g
@@ -1738,7 +1742,7 @@
     <path
        id="path4330"
        d="m 151,1101 v 16.5 h 4 V 1101 Z"
-       style="fill:#4d4d4d;fill-opacity:1"
+       style="fill:#0860f2;fill-opacity:1"
        inkscape:connector-curvature="0" />
   </g>
   <g
@@ -1753,7 +1757,7 @@
     <path
        id="path4336"
        d="m 155,1092.5 c -4,0.011 -4,2.7501 -4,8.4998 h 4 z"
-       style="fill:#4d4d4d;fill-opacity:1"
+       style="fill:#0860f2;fill-opacity:1"
        inkscape:connector-curvature="0" />
   </g>
   <g
@@ -1768,7 +1772,7 @@
     <path
        id="path4342"
        d="m 155,1092.5 c -4,0.011 -4,2.7501 -4,8.4998 h 4 z"
-       style="fill:#4d4d4d;fill-opacity:1"
+       style="fill:#0860f2;fill-opacity:1"
        inkscape:connector-curvature="0" />
   </g>
   <g
@@ -1783,7 +1787,7 @@
     <path
        id="path4348"
        d="m 155,1092.5 c -4,0.011 -4,2.7501 -4,8.4998 h 4 z"
-       style="fill:#4d4d4d;fill-opacity:1"
+       style="fill:#0860f2;fill-opacity:1"
        inkscape:connector-curvature="0" />
   </g>
   <circle
@@ -2115,7 +2119,7 @@
        d="M 92,717.5 H 80 v 12 h 12 z"
        id="path1193" />
     <path
-       style="opacity:.16;fill:#fff"
+       style="opacity:.32;fill:#0860f2"
        d="m 92,719.5 c -4.5,0 -8,4 -8,9 v 1 h 8 z"
        id="path1195" />
   </g>
@@ -2128,7 +2132,7 @@
        d="m 80,729.5 v 16.5 h 12 v -16.5 h -12 Z "
        id="path1198" />
     <path
-       style="opacity:.16;fill:#fff"
+       style="opacity:.32;fill:#0860f2"
        d="m 84,729.5 v 16.5 h 8 V 729.5 Z"
        id="path1200" />
   </g>
@@ -8540,6 +8544,12 @@
        id="rect6432"
        ry="6"
        style="fill:#ffffff" />
+    <rect
+       id="radio-focus-ring"
+       x="98" y="1.3621951"
+       width="14" height="14"
+       rx="7" ry="7"
+       style="fill:none;stroke:#0860f2;stroke-width:1.2;opacity:0.9" />
   </g>
   <g
      id="checkbox-focused"
@@ -8569,6 +8579,12 @@
        id="rect6462"
        ry="2"
        style="fill:#ffffff" />
+    <rect
+       id="checkbox-focus-ring"
+       x="18" y="1.3621807"
+       width="14" height="14"
+       rx="3" ry="3"
+       style="fill:none;stroke:#0860f2;stroke-width:1.2;opacity:0.9" />
   </g>
   <use
      x="0"

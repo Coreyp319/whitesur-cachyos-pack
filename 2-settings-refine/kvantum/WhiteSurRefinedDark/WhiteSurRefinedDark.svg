@@ -4071,7 +4071,7 @@
      transform="translate(593,-90.547214)">
     <path
        inkscape:connector-curvature="0"
-       style="fill-opacity:0"
+       style="fill:#315bef;fill-opacity:0.9"
        id="focus-top0"
        d="m 90,109.5 h 20 v -2 H 90 Z" />
     <g
@@ -8808,7 +8808,7 @@
      inkscape:label="#scrollbarslider-focused-topleft">
     <path
        inkscape:connector-curvature="0"
-       style="opacity:1;fill:#e6e6e6;fill-opacity:1;stroke-width:1"
+       style="opacity:1;fill:#315bef;fill-opacity:1;stroke-width:1"
        d="m 22.5,1141.4923 v 6.0077 h 6.015661 c 0,-3.3283 -2.682984,-6.0077 -6.015661,-6.0077 z"
        id="path4370-3" />
     <rect
@@ -8825,7 +8825,7 @@
      id="scrollbarslider-pressed-bottomleft">
     <path
        inkscape:connector-curvature="0"
-       style="opacity:1;fill:#e6e6e6;fill-opacity:1;stroke-width:1"
+       style="opacity:1;fill:#315bef;fill-opacity:1;stroke-width:1"
        d="m 22.5,1141.4923 c -3.315267,0 -5.984237,2.6794 -5.984237,6.0077 H 22.5 Z"
        id="path4346-7" />
     <rect
@@ -8844,7 +8844,7 @@
     <path
        id="path1072-2-3"
        d="m 22.5,1141.4922 v 6.0078 h 6.015661 c 0,-3.3283 -2.682984,-6.0078 -6.015661,-6.0078 z"
-       style="opacity:1;fill:#e6e6e6;fill-opacity:1;stroke-width:1"
+       style="opacity:1;fill:#315bef;fill-opacity:1;stroke-width:1"
        inkscape:connector-curvature="0" />
     <rect
        y="1132.4805"
@@ -8861,7 +8861,7 @@
     <path
        id="path1077-5-6"
        d="m 22.531288,1141.778 c -3.323989,0 -5.999981,2.552 -5.999981,5.722 h 5.999981 z"
-       style="opacity:1;fill:#e6e6e6;fill-opacity:1;stroke-width:0.97592622"
+       style="opacity:1;fill:#315bef;fill-opacity:1;stroke-width:0.97592622"
        inkscape:connector-curvature="0" />
     <rect
        y="1133.1949"
@@ -8879,7 +8879,7 @@
     <path
        id="path1082-1-9"
        d="m 190.53128,1174.7029 v 16.4063 0.094 h 5.99998 v -16.5 h -5.99998 z"
-       style="opacity:1;fill:#e6e6e6;fill-opacity:1;fill-rule:evenodd;stroke-width:1.04813671"
+       style="opacity:1;fill:#315bef;fill-opacity:1;fill-rule:evenodd;stroke-width:1.04813671"
        inkscape:connector-curvature="0" />
     <rect
        y="1178.0029"
@@ -8897,7 +8897,7 @@
     <path
        id="path1087-8-2"
        d="m 22.5,1147.5 v 15.0192 h 6.015661 c 0,-0.029 0,-0.056 0,-0.086 v -14.9339 H 22.5 Z"
-       style="opacity:1;fill:#e6e6e6;fill-opacity:1;stroke-width:1"
+       style="opacity:1;fill:#315bef;fill-opacity:1;stroke-width:1"
        inkscape:connector-curvature="0" />
     <rect
        y="1150.5037"
@@ -10085,6 +10085,11 @@
            id="path2968"
            inkscape:connector-curvature="0"
            style="fill:#ffffff;fill-opacity:1" />
+        <path
+           d="m 0.95977465,291.33314 c 0.16602605,-0.1542 0.49750985,-0.1542 0.82927705,-0.1542 h 1.9804064 c 0.3310126,0 0.6623071,0 0.8276724,0.1542 0.1653654,0.15421 0.1653654,0.46316 0.1653654,0.77184 v 1.45532 c 0,0 -1.9843753,2.302 -1.9843753,2.302 0,0 -1.9843706,-2.302 -1.9843706,-2.302 0,0 -4.2e-6,-1.45532 -4.2e-6,-1.45532 1.4e-6,-0.30868 2.8e-6,-0.61763 0.16602885,-0.77184 z"
+           id="slidercursor-focus-ring"
+           inkscape:connector-curvature="0"
+           style="fill:none;stroke:#315bef;stroke-width:0.32;stroke-opacity:0.95" />
       </g>
     </g>
   </g>
@@ -11599,6 +11604,12 @@
        id="rect6434"
        style="color:#000000;display:inline;overflow:visible;visibility:visible;fill:url(#linearGradient6559);fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:1.03775;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;marker:none;enable-background:accumulate"
        ry="6.5000029" />
+    <rect
+       id="radio-focus-ring"
+       x="97.995735" y="1.3621951"
+       width="14" height="14"
+       rx="7" ry="7"
+       style="fill:none;stroke:#315bef;stroke-width:1.2;opacity:0.95" />
   </g>
   <g
      transform="matrix(2.0000006,0,0,2.0000006,856,124.27564)"
@@ -11638,6 +11649,12 @@
        id="rect6464"
        style="color:#000000;display:inline;overflow:visible;visibility:visible;fill:url(#linearGradient6563);fill-opacity:1;stroke:none;stroke-width:1.03775;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;marker:none;enable-background:accumulate"
        ry="2.0000002" />
+    <rect
+       id="checkbox-focus-ring"
+       x="18" y="1.3621807"
+       width="14" height="14"
+       rx="2.1538463" ry="2.1538463"
+       style="fill:none;stroke:#315bef;stroke-width:1.2;opacity:0.95" />
   </g>
   <use
      height="100%"
