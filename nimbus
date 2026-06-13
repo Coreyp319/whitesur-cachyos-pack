@@ -166,6 +166,11 @@ cmd_revert(){
     echo "nimbus: name layers to revert (or 'all'), e.g. nimbus revert 8   [--purge]" >&2; return 1
   fi
   local targets; mapfile -t targets < <(resolve_targets "${REST[@]}")
+  # Reverting everything goes in reverse install order (undo 10→1).
+  case " ${REST[*]} " in *" all "*)
+    local rev=() j; for ((j=${#targets[@]}-1; j>=0; j--)); do rev+=("${targets[$j]}"); done
+    targets=("${rev[@]}") ;;
+  esac
   local i
   for i in "${targets[@]}"; do
     [ -n "$i" ] || continue

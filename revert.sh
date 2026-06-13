@@ -1,38 +1,31 @@
 #!/usr/bin/env bash
-# Master revert — undoes all ten layers. Pass --purge to also delete installed files.
-#   Layers 2–9 revert cleanly below. Layer 1 (base) now scripts its self-contained
-#   user-level bits (toggle, keybind, dock separator, dock-margin SVG); the Global-
-#   Theme reset + panel removal remain manual (they depend on your replacement).
+# Master revert — a thin front-end over `nimbus revert`, plus the special one-way
+# Layer 1 teardown the manifest can't express. Pass --purge to also delete files/
+# packages; -n/--dry-run to preview without changing anything.
+#   Layers 2–10 revert via nimbus.layers (single source of truth, reverse order).
+#   Layer 1 (base) scripts its self-contained user-level bits (toggle, keybind,
+#   dock separator, dock-margin SVG) below; the Global-Theme reset + panel removal
+#   stay MANUAL — they depend on your chosen replacement.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-PURGE="${1:-}"
 
-echo "── Layer 10: Nimbus Flux GPU fluid engine ──"
-bash "$HERE/10-shader-engine/revert.sh" "$PURGE" || true
+PURGE=""; DRY=0
+for a in "$@"; do case "$a" in
+  --purge)       PURGE=--purge ;;
+  -n|--dry-run)  DRY=1 ;;
+  -h|--help)     echo "Usage: bash revert.sh [--purge] [-n|--dry-run]"; exit 0 ;;
+esac; done
 
-echo "── Layer 9: GPU UI effects ──"
-bash "$HERE/9-gpu-effects/revert.sh" "$PURGE" || true
+# Layers 10→2 in reverse install order, driven by the manifest (no duplicate
+# ladder). --purge (when given) is forwarded; layers with no purge mode ignore it.
+nargs=(all); [ -n "$PURGE" ] && nargs+=("$PURGE"); [ "$DRY" = 1 ] && nargs+=(-n)
+"$HERE/nimbus" revert "${nargs[@]}"
 
-echo "── Layer 8: Dolphin Quick Look ──"
-bash "$HERE/8-dolphin-quicklook/revert.sh" "$PURGE" || true
-
-echo "── Layer 7: Apple-style notifications ──"
-bash "$HERE/7-notifications/revert.sh" "$PURGE" || true
-
-echo "── Layer 6: local AI (Ollama + Hermes) ──"
-bash "$HERE/6-local-ai/revert.sh" "$PURGE" || true
-
-echo "── Layer 5: system QoL ──"
-bash "$HERE/5-system-qol/revert.sh" "$PURGE" || true
-
-echo "── Layer 4: login + lock screen ──"
-bash "$HERE/4-login-lock/revert.sh" || true
-
-echo "── Layer 3: KRunner finder ──"
-bash "$HERE/3-krunner-finder/revert.sh" || true
-
-echo "── Layer 2: Settings refine ──"
-bash "$HERE/2-settings-refine/revert.sh" "$PURGE" || true
+if [ "$DRY" = 1 ]; then
+  echo; echo "── Layer 1 — would run its scripted user-level teardown (toggle/keybind/separator/dock-margins) ──"
+  echo "(dry run — nothing changed)"
+  exit 0
+fi
 
 echo "── Layer 1: base mac desktop ──"
 # Scripted teardown of the self-contained user-level artifacts this layer adds
@@ -61,4 +54,4 @@ echo "   Removed toggle + keybind + dock separator; restored dock margins."
 echo "   STILL MANUAL: System Settings → Global Theme → Breeze (light/dark), then"
 echo "   remove the dock panel (right-click → Enter Edit Mode → Remove Panel)."
 
-echo; echo "Revert complete for layers 2–9 (+ Layer 1 user-level bits). Restart Qt apps to see changes."
+echo; echo "Revert complete for layers 2–10 (+ Layer 1 user-level bits). Restart Qt apps to see changes."
