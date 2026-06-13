@@ -338,7 +338,9 @@ cat > "$HOME/.local/bin/nimbus-theme-toggle.sh" <<'EOF'
 #!/bin/bash
 # WhiteSur whole-desktop light<->dark toggle. Firefox follows via the portal.
 cur=$(kreadconfig6 --file kdeglobals --group General --key ColorScheme)
-if [[ "$cur" == *Dark* ]]; then
+# CoreyLavender is a dark scheme whose name doesn't say "Dark" — count it as dark
+# so toggling FROM it goes to light instead of clobbering it with WhiteSurDark.
+if [[ "$cur" == *Dark* || "$cur" == CoreyLavender ]]; then
   COLORS=WhiteSur; PTHEME=WhiteSur; ICONS=WhiteSur; KV=WhiteSur
   GTK=WhiteSur-Light; PREFERDARK=false; LNF=com.github.vinceliuice.WhiteSur; MODE=light
   DECO=__aurorae__svg__WhiteSur;      SPLASH=com.github.vinceliuice.WhiteSur
@@ -351,6 +353,11 @@ fi
 # controls survive a light/dark toggle instead of reverting to plain WhiteSur.
 if [ -d "$HOME/.config/Kvantum/NimbusRefined" ]; then
   [ "$MODE" = dark ] && KV=NimbusRefinedDark || KV=NimbusRefined
+fi
+# Prefer the custom CoreyLavender dark scheme when present, so its accessible
+# lavender accent survives the toggle instead of reverting to stock WhiteSurDark.
+if [ "$MODE" = dark ] && [ -f "$HOME/.local/share/color-schemes/CoreyLavender.colors" ]; then
+  COLORS=CoreyLavender
 fi
 plasma-apply-colorscheme  "$COLORS" >/dev/null 2>&1
 plasma-apply-desktoptheme "$PTHEME" >/dev/null 2>&1
