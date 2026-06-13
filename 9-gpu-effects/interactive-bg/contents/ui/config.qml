@@ -26,7 +26,7 @@ Kirigami.FormLayout {
     property alias cfg_Color3: c3.color
     property alias cfg_Color4: c4.color
 
-    readonly property bool customTheme: themeBox.currentIndex === 5
+    readonly property bool customTheme: themeBox.currentIndex === 9
     // Accent that the expressive AuroraSliders fill with. In Custom mode it
     // tracks the live "Accent" stop (c3) so fills recolour as you edit; for the
     // presets fall back to Plasma's accent so the form stays scheme-cohesive.
@@ -37,7 +37,9 @@ Kirigami.FormLayout {
         accentColor: cfg.auroraAccent
         Kirigami.FormData.label: i18n("Theme:")
         model: [i18n("Big Sur"), i18n("Monterey"), i18n("Graphite"),
-                i18n("Sunset"), i18n("Nord"), i18n("Custom…")]
+                i18n("Sunset"), i18n("Nord"),
+                i18n("Laserwave"), i18n("Vaporwave"), i18n("Cyberpunk"), i18n("Outrun"),
+                i18n("Custom…")]
     }
 
     AuroraComboBox {
@@ -45,7 +47,22 @@ Kirigami.FormLayout {
         accentColor: cfg.auroraAccent
         Kirigami.FormData.label: i18n("Style:")
         model: [i18n("Flow"), i18n("Hills"),
-                i18n("Silk curtains"), i18n("Caustics"), i18n("Ink in water")]
+                i18n("Silk curtains"), i18n("Caustics"), i18n("Ink in water"),
+                i18n("Laserwave"), i18n("Vaporwave"), i18n("Cyberpunk")]
+
+        // Per-style presets: snap the motion-character sliders to values tuned for
+        // each look — Hills/Ink want a slow drift, Caustics a touch quicker shimmer,
+        // Silk a little extra vividness (it reads faint); Laserwave/Cyberpunk a touch
+        // more neon punch, Vaporwave a dreamier drift. Indexed Flow·Hills·Silk·
+        // Caustics·Ink·Laserwave·Vaporwave·Cyberpunk. Uses onActivated (a USER pick) —
+        // NOT onCurrentIndexChanged — so opening the dialog or loading saved config
+        // never overwrites your tweaks.
+        readonly property var speedPreset:     [1.00, 0.60, 0.80, 1.10, 0.70, 1.00, 0.70, 1.00]
+        readonly property var intensityPreset: [1.00, 1.00, 1.15, 0.95, 1.00, 1.10, 1.00, 1.10]
+        onActivated: {
+            speedSlider.value     = styleBox.speedPreset[styleBox.currentIndex]
+            intensitySlider.value = styleBox.intensityPreset[styleBox.currentIndex]
+        }
     }
 
     AuroraComboBox {

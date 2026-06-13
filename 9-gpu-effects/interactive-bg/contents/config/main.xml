@@ -7,36 +7,38 @@
 
   <group name="General">
     <entry name="Theme" type="Int">
-      <label>Colour theme (0 Big Sur, 1 Monterey, 2 Graphite, 3 Sunset, 4 Nord, 5 Custom)</label>
-      <default>3</default>
+      <label>Colour theme (0 Big Sur, 1 Monterey, 2 Graphite, 3 Sunset, 4 Nord, 5 Laserwave, 6 Vaporwave, 7 Cyberpunk, 8 Outrun, 9 Custom)</label>
+      <default>0</default>
     </entry>
     <entry name="Style" type="Int">
-      <label>Base look (0 Flow, 1 Hills, 2 Silk curtains, 3 Caustics, 4 Ink in water)</label>
+      <label>Base look (0 Flow, 1 Hills, 2 Silk curtains, 3 Caustics, 4 Ink in water, 5 Laserwave, 6 Vaporwave, 7 Cyberpunk)</label>
       <default>0</default>
     </entry>
     <entry name="Intensity" type="Double">
       <label>Colour vividness (1 = as designed, lower = muted)</label>
-      <default>2.0</default>
+      <default>1.0</default>
     </entry>
     <entry name="Appearance" type="Int">
       <label>Light/dark: 0 follow colour scheme, 1 always light, 2 always dark</label>
       <default>0</default>
     </entry>
 
-    <!-- Custom palette, low → high stop. Used only when Theme == 3.
+    <!-- Custom palette, low → high stop. Used only when Theme == 9 (Custom).
          Defaults to the Big Sur preset so "Custom" starts somewhere sensible. -->
     <entry name="Color0" type="Color"><default>#0d0f29</default></entry>
     <entry name="Color1" type="Color"><default>#1c2e73</default></entry>
     <entry name="Color2" type="Color"><default>#4552b8</default></entry>
     <entry name="Color3" type="Color"><default>#8f5cb8</default></entry>
     <entry name="Color4" type="Color"><default>#fa8c73</default></entry>
+    <!-- Speed/Intensity defaults match the Flow preset; picking another style in
+         the config dialog snaps these to that style's tuned values (see config.qml). -->
     <entry name="Speed" type="Double">
       <label>Motion speed multiplier</label>
-      <default>2.5</default>
+      <default>1.0</default>
     </entry>
     <entry name="Interactivity" type="Double">
       <label>Cursor influence (0 = still, 1 = full bloom)</label>
-      <default>0.2</default>
+      <default>0.5</default>
     </entry>
     <entry name="WindowReact" type="Double">
       <label>React to window movement (0 = off, 1 = full). Needs the aurora
@@ -46,7 +48,7 @@
     <entry name="MusicReact" type="Double">
       <label>React to music (0 = off, 1 = full). Needs the aurora audio
              bridge installed (Layer 9 / audio-apply.sh).</label>
-      <default>0.0</default>
+      <default>0.3</default>
     </entry>
   </group>
 </kcfg>
