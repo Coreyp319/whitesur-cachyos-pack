@@ -63,10 +63,14 @@ too. Fully reversible: `2-settings-refine/revert.sh`.
   path), tighter gutter, fade/lift animations. Patches milou's QML and installs a
   **pacman hook** so it survives milou upgrades. Backs up originals; revert with
   `sudo bash 3-krunner-finder/row-tweak/revert.sh`.
-- **Web / Claude runner** *(no sudo)*: type and pause ~3 s for "Search the web"
-  rows, or prefix for instant — `s …`/`ddg …` (DuckDuckGo), `gh …` (GitHub),
-  `w …` (Wikipedia), `yt …` (YouTube). `c …`/`ai …` → **Ask Claude**, shown only
-  if the `claude` CLI is on `PATH` (otherwise it stays hidden).
+- **Web / Claude / Hermes runner** *(no sudo)*: type and pause ~3 s for the
+  auto-show rows, or prefix for instant — `s …`/`ddg …` (DuckDuckGo), `gh …`
+  (GitHub), `w …` (Wikipedia), `yt …` (YouTube). `c …`/`ai …` → **Ask Claude**
+  (opens a Claude Code session in konsole), shown only if the `claude` CLI is on
+  `PATH`. `h …`/`hermes …` → **Ask Hermes** (opens `ollama run` on the local
+  Hermes model in konsole — answers your query, then a REPL for follow-ups),
+  shown only if `ollama` is present with a `hermes*` model pulled (Layer 6).
+  Both stay hidden when their backend is missing.
 
 ### 4 · Login + lock screen  — `4-login-lock/`
 Brings the two stock-Breeze surfaces into line so **login → lock → desktop** read
@@ -150,23 +154,31 @@ from a service menu). Implemented with user-level files:
   shortcuts, the two lines are merged into your file instead (backed up to `.orig`).
   On a different Dolphin version, assign Space once via *Configure Keyboard Shortcuts →
   Context Menu Actions → Quick Look* (it then sticks).
+- **Borderless popup** — a KWin rule (`~/.config/kwinrulesrc`, matched on kiview's
+  app-id `io.github.nyre221.kiview`) strips the titlebar so it reads as a transient
+  Quick Look panel rather than an app window. The menu entry is labelled **"Quick Look
+  (Space)"** to surface the shortcut.
 - **Limitation:** the preview shows the file you launched it on and navigates *that*
   file's folder; it does **not** live-follow Dolphin's selection (no KDE tool does that).
 
-Revert: `8-dolphin-quicklook/revert.sh` (restores the original `dolphinui.rc` or removes
-ours; `--purge` also uninstalls the kiview-git package).
+Revert: `8-dolphin-quicklook/revert.sh` (restores `dolphinui.rc` + `kwinrulesrc` or
+removes ours; `--purge` also uninstalls the kiview-git package).
 
 ### 9 · GPU UI effects  — `9-gpu-effects/`
 GLSL shaders running **inside KWin's GPU compositing pipeline** (Plasma 6 already draws
 the whole UI on the GPU — KWin composites through OpenGL/EGL, the shell via the QtQuick
-scene graph; this layer just changes *which* shaders run). Two opt-in items:
-- **Better Blur** (`kwin-effects-forceblur`, from the AUR) — a fork of KWin's blur that
-  can **force-blur any window** (even opaque ones), draws **rounded corners with
-  anti-aliasing**, and exposes brightness/contrast/saturation + a low-GPU **static-blur**
-  mode. It *replaces* Layer 1's stock blur (only one blur effect can run), so the install
-  flips `blurEnabled→false` / `forceblurEnabled→true` and matches BlurStrength 15. Tune
-  the rest in *Desktop Effects → Better Blur*. (Upstream is archived; the maintained
-  successor is `kwin-effects-glass` if the AUR build breaks.)
+scene graph; this layer just changes *which* shaders run). Three opt-in items:
+- **Glass blur** (`kwin-effects-glass-git`, from the AUR; falls back to the archived
+  `kwin-effects-forceblur`) — a maintained fork of KWin's blur that can **force-blur any
+  window** (even opaque ones), draws **rounded corners**, blurs **docks/menus**
+  (`BlurDocks`/`BlurMenus`), and adds refraction + brightness/saturation. It *replaces*
+  Layer 1's stock blur (only one blur fork can run), so the install flips
+  `blurEnabled→false` / `glassEnabled→true` and matches BlurStrength 15. Tune the rest in
+  *Desktop Effects → Glass*.
+  ⚠ **These forks ignore `qdbus6 …/KWin reconfigure`** — after editing their config you
+  must re-apply via the `/Effects` D-Bus interface
+  (`org.kde.kwin.Effects.reconfigureEffect glass`), or the change silently does nothing.
+  The bundled skill (`.claude/skills/kwin-gpu-effects/`) and its inspector handle this.
 - **Desktop shaders** (`kwin-effect-shaders`, built from source) — a single-pass GLSL
   post-process over the **final composited image**, a ReShade/vkBasalt equivalent for the
   whole desktop. Ships **CAS** (contrast-adaptive sharpening), FakeHDR, deband, tonemap,
@@ -174,19 +186,28 @@ scene graph; this layer just changes *which* shaders run). Two opt-in items:
   point releases). The visible shader pass stays **off** until you bind a toggle key
   (*Shortcuts → KWin → Toggle Shaders*); pick/tune shaders in
   `~/.local/share/kwin-effect-shaders_shaders/1_settings.glsl`.
+- **Interactive aurora wallpaper** (`com.whitesur.aurora`, in `interactive-bg/`) — a custom
+  Plasma 6 wallpaper plugin: an animated Big Sur gradient drawn by a GLSL fragment shader
+  on the QtQuick scene graph. **Cursor-reactive** (a warm light blooms under the pointer,
+  clicks pass through), **light/dark-aware** (follows the dock theme toggle automatically),
+  with presets (Big Sur · Monterey · Graphite · Sunset · Nord) **+ a custom palette** and
+  motion/vividness sliders — all in *Wallpaper → Configure*. Installs via
+  `interactive-bg/apply.sh`, saving the prior wallpaper for a faithful revert. See
+  `interactive-bg/README.md`.
 
-**Wayland only** in practice — X11 disables compositing for fullscreen apps. Both are pure
+**Wayland only** in practice — X11 disables compositing for fullscreen apps. All are pure
 GLSL on the OpenGL backend (KWin's Vulkan backend is still experimental as of 2026).
 
-Revert: `9-gpu-effects/revert.sh` restores Layer 1's stock blur and turns the shader pass
-off; `--purge` also removes the package, the built effect, and the shader checkout.
+Revert: `9-gpu-effects/revert.sh` restores Layer 1's stock blur, turns the shader pass
+off, and switches the wallpaper back to whatever was active before the aurora; `--purge`
+also removes the package, the built effect, the shader checkout, and the aurora plugin.
 
 ---
 
 ## Requirements
 - Arch / CachyOS (`pacman`), **KDE Plasma 6**, **Wayland**
 - Layer 1 installs (via sudo): `kvantum sassc optipng`
-- Layer 3 runner deps: `python-dbus python-gobject` (web/Claude runner)
+- Layer 3 runner deps: `python-dbus python-gobject` (web/Claude/Hermes runner)
 - Internet (Layer 1 clones the WhiteSur themes + downloads the Inter font)
 
 ## Caveats (please read)

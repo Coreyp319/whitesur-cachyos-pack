@@ -6,13 +6,13 @@
 #                            Spotlight, light/dark toggle, Firefox-follows-system
 #    2) Settings refine    — theme-aware monochrome System Settings section icons
 #    3) KRunner finder     — bold two-line result rows + animations, and an
-#                            "Ask Claude"/web-search runner
+#                            "Ask Claude"/"Ask Hermes"/web-search runner
 #    4) Login + lock       — Big Sur continuity on the SDDM login + lock screens
 #    5) System QoL         — paccache, Flatpak+Flathub, fish tooling, Timeshift
 #    6) Local AI           — ollama-cuda + Hermes 4 14B / 4.3 36B on the GPU
 #    7) Notifications      — Apple-style swaync toasts + notification center
 #    8) Dolphin Quick Look — Space previews the selected file in kiview
-#    9) GPU UI effects     — Better Blur (force-blur + rounded corners) and
+#    9) GPU UI effects     — Glass blur (force-blur + rounded corners) and
 #                            ReShade-style desktop GLSL shaders (CAS sharpening)
 #
 #  Run as your normal user (NOT root). Uses sudo only where noted (packages,
@@ -39,7 +39,8 @@ cat <<'NOTICE'
        sidebar sections; a tiny systemd watcher re-tints them on light↔dark.
     3) KRunner finder    — bigger two-line search rows + animations (needs
        sudo: patches milou's QML, adds a pacman re-apply hook), plus a
-       web-search / Ask-Claude runner (Claude part needs the `claude` CLI).
+       web-search / Ask-Claude / Ask-Hermes runner (Claude needs the `claude`
+       CLI; Hermes needs Layer 6's Ollama + a hermes model).
     4) Login + lock      — Big Sur wallpaper on the lock screen (user-level)
        and the SDDM login screen (needs sudo), for login→lock→desktop unity.
     5) System QoL        — general OS ergonomics (NOT desktop look): weekly
@@ -57,10 +58,11 @@ cat <<'NOTICE'
        through the folder). Adds a "Quick Look" service menu + binds Space to it
        inside Dolphin only. Builds kiview from git master. Fully reversible.
     9) GPU UI effects     — GLSL shaders inside KWin's GPU compositing pipeline:
-       Better Blur (force-blur ANY window + rounded corners; REPLACES Layer 1's
-       stock blur — from the AUR) and kwin-effect-shaders (ReShade-style desktop
-       post-process: CAS sharpening, deband, tonemap — built from source). The
-       shader pass stays OFF until you bind a toggle key. Fully reversible.
+       Glass blur (force-blur ANY window + rounded corners + dock/menu blur;
+       REPLACES Layer 1's stock blur — from the AUR) and kwin-effect-shaders
+       (ReShade-style desktop post-process: CAS sharpening, deband, tonemap —
+       built from source). The shader pass stays OFF until you bind a toggle key.
+       Fully reversible.
 
   REQUIREMENTS:  Arch/CachyOS · KDE Plasma 6 · Wayland · run as normal user.
   REVERSIBLE:    ./revert.sh  (undoes every layer; --purge also deletes files).
@@ -96,7 +98,7 @@ fi
 if ask "LAYER 8 — Dolphin Quick Look (Space → preview)"; then
   bash "$HERE/8-dolphin-quicklook/install.sh" $([ "$ALL" = 1 ] && echo -y) || echo "  (layer 8 reported issues — see above)"
 fi
-if ask "LAYER 9 — GPU UI effects (Better Blur + desktop shaders)"; then
+if ask "LAYER 9 — GPU UI effects (Glass blur + desktop shaders)"; then
   bash "$HERE/9-gpu-effects/install.sh" $([ "$ALL" = 1 ] && echo -y) || echo "  (layer 9 reported issues — see above)"
 fi
 
@@ -110,7 +112,8 @@ cat <<'DONE'
    ────────────────────────────────────────────────────────────
    ✅  Done. LOG OUT and back in to finish (Meta+Space, Meta+Ctrl+T).
        Dock auto-hides — push your mouse to the bottom edge.
-       Toggle light/dark: dock icon · "Toggle Light" in Spotlight · Meta+Ctrl+T.
+       Toggle light/dark: dock icon (☼/☾, relabels itself) · search "Switch"
+       in Spotlight · Meta+Ctrl+T.
        Revert anytime:  ./revert.sh   (add --purge to delete installed files)
    ────────────────────────────────────────────────────────────
 DONE
