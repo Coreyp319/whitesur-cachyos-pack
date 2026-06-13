@@ -66,6 +66,10 @@ python3 scripts/ui-audit-apply.py --ops ops.json --state "$ST" --apply    # auto
 python3 scripts/ui-audit-apply.py --approve <pending_id>
 # Undo a whole run:
 python3 scripts/ui-audit-apply.py --revert <run_id>
+# Optional: refresh the usage signal so the report FOCUSES on apps you use
+# (opt-in, app-level, network-isolated; advisory ranking only — never changes
+# what may be applied). Apply step picks up usage.json automatically.
+bash scripts/run-sandboxed.sh ui-audit-usage.py
 ```
 
 **Read `references/audit-protocol.md` first** — it is the operating contract.

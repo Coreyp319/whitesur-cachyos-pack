@@ -39,8 +39,8 @@ if ask "Deploy the kde-plasma-customization skill into $SKILL_DST"; then
   mkdir -p "$SKILL_DST/references" "$SKILL_DST/scripts"
   cp "$HERE/skill/SKILL.md"            "$SKILL_DST/SKILL.md"
   cp "$HERE/skill/references/"*.md     "$SKILL_DST/references/"
-  cp "$HERE/skill/scripts/"*.py        "$SKILL_DST/scripts/"
-  chmod +x "$SKILL_DST/scripts/"*.py
+  cp "$HERE/skill/scripts/"*.py "$HERE/skill/scripts/"*.sh "$SKILL_DST/scripts/"
+  chmod +x "$SKILL_DST/scripts/"*.py "$SKILL_DST/scripts/"*.sh 2>/dev/null || true
   mkdir -p "$RUNTIME/state" "$RUNTIME/pending" "$RUNTIME/backups"
   ok "skill + runtime dirs deployed"
   # Sanity: the scripts must at least parse with the system python.
@@ -87,6 +87,20 @@ else:
         nr = None
     print(f"  \033[32m✓\033[0m created cron job {jid} (daily 09:00) next_run={nr}")
 PY
+  fi
+fi
+
+# --- usage focus (opt-in, privacy-respecting, local-only) ------------------
+if ask "Enable usage-focused refinement (reuses KDE app-usage scores, local-only)"; then
+  msg "Enabling usage focus…"
+  if python3 "$SKILL_DST/scripts/ui-audit-usage.py" --grant-consent >/dev/null 2>&1; then
+    ok "consent granted — data under $RUNTIME/usage/ (0600)"
+    echo "   Privacy: app-level only (KActivities initiatingAgent counts; NEVER"
+    echo "   resource paths/URLs/titles), favourites, and the audit ledger."
+    echo "   Network-isolated via run-sandboxed.sh; 30-day retention. Forget anytime:"
+    echo "     python3 $SKILL_DST/scripts/ui-audit-usage.py --forget"
+  else
+    warn "could not grant consent (is python3 available?)"
   fi
 fi
 

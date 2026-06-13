@@ -123,7 +123,11 @@ package install:
   assertions, an allowlist that denies load-bearing keys, **earned** auto-apply
   (nothing applies until you approve a key once), backup+verify, `--revert`, and a
   deterministic report. Reversible via `ui-audit/revert.sh` (`--purge` also clears
-  the audit runtime/ledger).
+  the audit runtime/ledger). An **opt-in usage signal** (`ui-audit-usage.py`, run
+  network-isolated via `run-sandboxed.sh`) lets the report *focus* on the apps you
+  actually use — app-level only (reuses KDE's KActivities scores; never reads file
+  paths/URLs/titles/keystrokes/network), advisory ranking only (never changes what
+  may be applied), 0600 + 30-day retention + `--forget`.
 
 Models are defined by the two `Modelfile.*` (quant + context); edit and re-run
 `ollama create` to retune. No sandbox yet — this just serves the models.

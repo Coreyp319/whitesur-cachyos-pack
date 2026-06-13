@@ -77,6 +77,21 @@ Kvantum/decoration `theme` — load-bearing, stabilised by hand.
 - **Undo a whole run:** `ui-audit-apply.py --revert <run_id>` restores every file
   that run backed up (each file is backed up once per run, true pre-run state).
 
+## Usage focus (optional, opt-in, advisory)
+If a usage signal exists it makes the report FOCUS on what the user actually uses.
+It is purely advisory — it reorders findings and picks "one thing"; it NEVER changes
+the allowlist, assertion, earned-auto, or what may be applied.
+- Collect it (only via the sandbox so it cannot reach the network):
+  `bash scripts/run-sandboxed.sh ui-audit-usage.py`
+- The applier reads `~/.hermes/ui-audit/usage/usage.json` automatically (or `--usage`);
+  absent → no weighting (graceful). It weights staged items by `confidence × usage`,
+  down-ranks classes you've reverted, and adds a "Focus" note.
+- **Privacy contract (the collector enforces this):** app-level only — KActivities
+  `initiatingAgent` counts (NEVER `targettedResource`), kickoff favorites, and our own
+  ledger. No file paths, URLs, window titles, keystrokes, or network. Opt-in
+  (`ui-audit-usage.py --grant-consent`), 0600 files, 30-day retention,
+  `ui-audit-usage.py --forget` wipes it. `usage.json` is plain text — read it anytime.
+
 ## Honesty
 - "applied" means the file was written and re-read-verified. kdeglobals changes
   are labelled "effective next session" (no safe live reload); kwinrc triggers a

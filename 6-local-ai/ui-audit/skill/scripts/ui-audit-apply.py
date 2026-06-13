@@ -62,6 +62,7 @@ BACKUPS = RUNTIME / "backups"
 STATE = RUNTIME / "state" / "state.json"
 PREV_STATE = RUNTIME / "state" / "state.prev.json"
 REPORT = RUNTIME / "report.md"
+USAGE = RUNTIME / "usage" / "usage.json"  # optional, advisory ranking signal
 
 CONFIDENCE_FLOOR = 0.6  # auto-apply needs at least this; missing confidence stages
 
@@ -311,7 +312,35 @@ def state_diff(state, prev):
     return out
 
 
-def build_report(run_id, mode, results, state, prev):
+def load_usage(path: Path):
+    """Optional usage signal. Absent/unreadable → None (no weighting; graceful)."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+    except Exception:
+        return None
+
+
+def usage_weight(rec, usage):
+    """ADVISORY ranking weight in [~0.3, ~1.5]. Only reorders the report — never
+    changes guardrail decisions (allowlist/assertion/earned-auto are upstream)."""
+    if not usage:
+        return 1.0
+    w = 1.0
+    fb = (usage.get("feedback", {}).get("by_class", {}) or {}).get(rec.get("class"))
+    if fb:
+        ar = fb.get("approval_rate")
+        if ar is not None:
+            w *= 0.6 + 0.8 * ar          # ar 0→0.6, 1→1.4: surface what you accept
+        if fb.get("vetoes"):
+            w *= 0.6                      # you reverted this class before → lower
+    key = rec.get("key", "")
+    tk = usage.get("toolkit_hint", {}) or {}
+    if key.endswith("Font") or key == "Font" or key == "contrast":
+        w *= 0.7 + (tk.get("qt", 0) + tk.get("gtk", 0))   # text matters more if Qt/GTK-heavy
+    return w
+
+
+def build_report(run_id, mode, results, state, prev, usage=None):
     L = [f"# Daily UI audit — {run_id} ({mode})", ""]
     diff = state_diff(state, prev)
     L.append("## Changed since last run")
@@ -331,6 +360,12 @@ def build_report(run_id, mode, results, state, prev):
         verb = "would auto-apply" if r["status"] == "dry-auto" else "applied"
         L.append(f"- {verb} `{r['key']}` `{r['before']}`→`{r['after']}` "
                  f"({r.get('effect','')}) — {r.get('rationale','')}")
+    # Always rank by confidence; usage (when present) MULTIPLIES the weight
+    # (usage_weight returns 1.0 when usage is None → pure confidence order).
+    # Usage is advisory: the SET of staged items is identical with/without it —
+    # only the order and the "one thing" pick change.
+    staged = sorted(staged, key=lambda r: (r.get("confidence") or 0.5) * usage_weight(r, usage),
+                    reverse=True)
     L += ["", "## Awaiting your approval (staged)"]
     if not staged:
         L.append("- nothing staged")
@@ -343,7 +378,14 @@ def build_report(run_id, mode, results, state, prev):
         L += ["", "## Skipped / rejected"]
         for r in rejected:
             L.append(f"- {r['status']} `{r.get('key')}`: {r['message']}")
-    one = max((r for r in staged), key=lambda r: r.get("confidence") or 0, default=None)
+    if usage:
+        top = ", ".join(e["app"] for e in (usage.get("app_scores") or [])[:3]) or "—"
+        L += ["", "## Focus", f"- ranked toward your most-used apps: {top}"]
+        vetoed = [c for c, f in (usage.get("feedback", {}).get("by_class", {}) or {}).items()
+                  if f.get("vetoes")]
+        if vetoed:
+            L.append(f"- down-ranked (you reverted these before): {', '.join(vetoed)}")
+    one = staged[0] if staged else None
     L += ["", "## One thing worth doing"]
     L.append(f"- {one['key']}: {one.get('rationale','')}" if one else "- nothing actionable today")
     return "\n".join(L) + "\n"
@@ -472,6 +514,8 @@ def main():
     ap.add_argument("--confidence-floor", type=float, default=CONFIDENCE_FLOOR)
     ap.add_argument("--approve", metavar="PENDING_ID")
     ap.add_argument("--revert", metavar="RUN_ID")
+    ap.add_argument("--usage", default=str(USAGE),
+                    help="optional usage.json for advisory ranking (absent = no weighting)")
     args = ap.parse_args()
 
     # --- revert mode ---
@@ -520,7 +564,8 @@ def main():
     dry = not args.apply
     run_id, results = process_ops(ops, state, prev, dry, args.max_auto, args.confidence_floor)
 
-    report = build_report(run_id, "dry-run" if dry else "apply", results, state, prev)
+    usage = load_usage(Path(args.usage))
+    report = build_report(run_id, "dry-run" if dry else "apply", results, state, prev, usage)
     if not dry:
         RUNTIME.mkdir(parents=True, exist_ok=True)
         REPORT.write_text(report, encoding="utf-8")
