@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""KRunner D-Bus runner: ask Claude or web-search from KRunner.
+"""KRunner D-Bus runner: ask Claude, ask local Hermes, or web-search from KRunner.
 
 Behaviour:
-  * Type any query and pause: after DEBOUNCE_MS the rows "Ask Claude: <q>" and
-    "Search the web: <q>" auto-appear (low/weak relevance, so they sit at the
-    bottom and never steal the default action).
+  * Type any query and pause: after DEBOUNCE_MS the rows "Ask Claude: <q>",
+    "Ask Hermes: <q>" and "Search the web: <q>" auto-appear (low/weak relevance,
+    so they sit at the bottom and never steal the default action).
   * Instant path (no waiting) via keyword prefix:
       c <text>  / claude <text> / ai <text>     -> Ask Claude
+      h <text>  / hermes <text>                  -> Ask local Hermes (Ollama)
       s <text>  / ddg <text>    / search <text>  -> Web search
 
 The debounce works because KRunner only re-queries on text change: every
@@ -29,7 +30,13 @@ IFACE = "org.kde.krunner1"
 CLAUDE_BIN = "/home/corey/.local/bin/claude"
 TERMINAL = "konsole"
 
+# Local Hermes via Ollama. Both templated by install.sh: OLLAMA_BIN to the
+# detected runner, HERMES_MODEL to the best pulled hermes* tag (empty = hidden).
+OLLAMA_BIN = "/usr/bin/ollama"
+HERMES_MODEL = "hermes4.3-36b"
+
 CLAUDE_PREFIXES = ("c ", "claude ", "ai ")
+HERMES_PREFIXES = ("h ", "hermes ")
 
 # (prefixes, label, icon, url-template) — each is an instant prefix path.
 ENGINES = (
@@ -76,6 +83,16 @@ class Runner(dbus.service.Object):
             {"subtext": dbus.String("Start a Claude Code session in konsole")},
         )
 
+    def _hermes_match(self, text, relevance):
+        return (
+            "hermes" + SEP + text,
+            "Ask Hermes: " + text,
+            "applications-science",
+            EXACT_MATCH,
+            relevance,
+            {"subtext": dbus.String("Chat with local Hermes (" + HERMES_MODEL + ") in konsole")},
+        )
+
     def _open_match(self, engine, text, relevance):
         _prefixes, label, icon, url_tpl = engine
         return (
@@ -105,7 +122,11 @@ class Runner(dbus.service.Object):
         cb, q = self._pending_reply, self._pending_query
         self._pending_reply = None
         if cb is not None:
-            cb(([self._claude_match(q, 0.3)] if CLAUDE_BIN else []) + [self._open_match(DEFAULT_ENGINE, q, 0.3)])
+            cb(
+                ([self._claude_match(q, 0.3)] if CLAUDE_BIN else [])
+                + ([self._hermes_match(q, 0.3)] if OLLAMA_BIN and HERMES_MODEL else [])
+                + [self._open_match(DEFAULT_ENGINE, q, 0.3)]
+            )
         return False  # one-shot
 
     # --- krunner1 interface -------------------------------------------------
@@ -118,6 +139,10 @@ class Runner(dbus.service.Object):
         text = _arg_for(query, CLAUDE_PREFIXES)
         if text and CLAUDE_BIN:
             reply_cb([self._claude_match(text, 1.0)])
+            return
+        text = _arg_for(query, HERMES_PREFIXES)
+        if text and OLLAMA_BIN and HERMES_MODEL:
+            reply_cb([self._hermes_match(text, 1.0)])
             return
         for engine in ENGINES:
             text = _arg_for(query, engine[0])
@@ -155,6 +180,15 @@ class Runner(dbus.service.Object):
         if kind == "claude":
             subprocess.Popen(
                 [TERMINAL, "-e", "bash", "-lc", 'exec "$0" "$1"', CLAUDE_BIN, payload],
+                start_new_session=True, env=env,
+            )
+        elif kind == "hermes":
+            # Single-shot answer to the typed query, then hand off to an
+            # interactive REPL on the same model for follow-ups.
+            subprocess.Popen(
+                [TERMINAL, "-e", "bash", "-lc",
+                 '"$0" run "$1" "$2"; echo; exec "$0" run "$1"',
+                 OLLAMA_BIN, HERMES_MODEL, payload],
                 start_new_session=True, env=env,
             )
         elif kind == "open":
