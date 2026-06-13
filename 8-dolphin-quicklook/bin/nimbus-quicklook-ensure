@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# nimbus-quicklook-ensure — re-assert Dolphin's "Quick Look on Space" binding.
+#
+# Layer 8 of the Nimbus CachyOS pack. The Space binding does not live in a file
+# WE own — it lives in Dolphin's KXmlGui rc (~/.local/share/kxmlgui5/dolphin/
+# dolphinui.rc), which Dolphin rewrites on every exit and every shortcut/toolbar
+# change, and which KDE can regenerate on a Dolphin update. A sycoca rebuild that
+# misses our service menu, or a stale pre-rebrand entry, leaves Space doing
+# nothing. So rather than trust the rc to stay put, we verify all three legs of
+# the binding here and run this every login (systemd-user oneshot,
+# nimbus-quicklook-ensure.service) plus once at install time. Fully idempotent;
+# safe to run by hand.
+#
+#   leg 1  the service menu .desktop is present + executable (recreated if gone)
+#   leg 2  kbuildsycoca6 has it indexed (only rebuilt when leg 1 changed)
+#   leg 3  the rc ActionProperties carries exactly one Space->Quick Look line
+#          (stale whitesur-* lines dropped; duplicates collapsed)
+#
+# Note: a running Dolphin only re-reads the rc on restart, so if you run this by
+# hand while Dolphin is open, restart Dolphin to pick up a freshly-fixed binding.
+set -uo pipefail
+
+SVC_DIR="$HOME/.local/share/kio/servicemenus"
+SVC="$SVC_DIR/nimbus-quicklook.desktop"
+OLD_SVC="$SVC_DIR/whitesur-quicklook.desktop"          # pre-rebrand name (v0.1.x)
+RC_DIR="$HOME/.local/share/kxmlgui5/dolphin"           # KF6 keeps the kxmlgui5 dir name
+RC="$RC_DIR/dolphinui.rc"
+SEED="$HOME/.local/share/nimbus-quicklook/dolphinui.rc" # canonical full rc, laid down by install.sh
+NAME='servicemenu_nimbus-quicklook.desktop::quickLook'  # ServiceMenuShortcutManager action id
+
+# Canonical service-menu definition, kept inline so the binding can self-heal
+# even if the installed copy is deleted. Must stay byte-identical to the repo's
+# nimbus-quicklook.desktop.
+read -r -d '' SVC_BODY <<'EOF'
+[Desktop Entry]
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=all/allfiles;
+Actions=quickLook;
+X-KDE-Priority=TopLevel
+
+[Desktop Action quickLook]
+Name=Quick Look (Space)
+Icon=quickview
+Exec=kiview -s %f
+EOF
+
+changed=0
+
+# --- leg 1: the service menu .desktop ---------------------------------------
+# Drop a stale pre-rebrand copy so it can't shadow ours or double the menu.
+[ -e "$OLD_SVC" ] && { rm -f "$OLD_SVC"; changed=1; }
+# KIO refuses to run a user service menu carrying Exec= unless it's executable.
+if [ ! -x "$SVC" ] || ! printf '%s\n' "$SVC_BODY" | cmp -s - "$SVC"; then
+  mkdir -p "$SVC_DIR"
+  printf '%s\n' "$SVC_BODY" > "$SVC"
+  chmod 755 "$SVC"
+  changed=1
+fi
+
+# --- leg 2: sycoca index (only when leg 1 actually changed) ------------------
+[ "$changed" -eq 1 ] && kbuildsycoca6 >/dev/null 2>&1 || true
+
+# --- leg 3: the rc ActionProperties binding ---------------------------------
+ensure_rc() {
+  # No rc yet: seed Dolphin's full rc with our binding baked in. A bare
+  # ActionProperties stub is silently discarded by KXmlGui — it only honours a
+  # local rc that carries the complete menu/toolbar structure — so we need the
+  # full seed, not a fragment.
+  if [ ! -f "$RC" ]; then
+    [ -f "$SEED" ] || { printf 'nimbus-quicklook-ensure: no rc and no seed at %s\n' "$SEED" >&2; return; }
+    mkdir -p "$RC_DIR"
+    install -m644 "$SEED" "$RC"
+    changed=1
+    return
+  fi
+
+  # rc exists. Decide whether it already carries exactly our binding and nothing
+  # stale; if so, leave it untouched (keeps logins cheap and avoids churn).
+  # grep -c prints its own "0" and exits 1 on no match; `|| true` swallows the
+  # exit without appending a second line (a trailing `|| echo 0` would make
+  # "0\n0" and break the string compare below).
+  local nimbus_lines stale
+  nimbus_lines=$(grep -c "$NAME" "$RC" 2>/dev/null || true)
+  stale=$(grep -c 'servicemenu_whitesur-quicklook.desktop::quickLook' "$RC" 2>/dev/null || true)
+  if [ "$nimbus_lines" = "1" ] && [ "$stale" = "0" ] \
+     && grep -q 'name="toggle_selection_mode" shortcut="none"' "$RC"; then
+    return
+  fi
+
+  if grep -q '</ActionProperties>' "$RC"; then
+    # Within the FIRST ActionProperties block only: strip every existing
+    # quickLook line (nimbus or stale whitesur) and any toggle_selection_mode
+    # override, then re-insert exactly one of each before the block closes.
+    # Scoping to the AP block is critical: toggle_selection_mode ALSO appears in
+    # the menu/toolbar structure, and that placement must be left intact.
+    awk -v name="$NAME" '
+      /<ActionProperties/ { in_ap=1 }
+      in_ap && !done && /<\/ActionProperties>/ {
+        print "        <Action name=\"" name "\" shortcut=\"Space\"/>"
+        print "        <Action name=\"toggle_selection_mode\" shortcut=\"none\"/>"
+        done=1; in_ap=0
+      }
+      in_ap && !done && index($0, "::quickLook")                      { next }
+      in_ap && !done && index($0, "name=\"toggle_selection_mode\"")   { next }
+      { print }
+    ' "$RC" > "$RC.tmp" && mv "$RC.tmp" "$RC"
+    changed=1
+  elif grep -q '</gui>' "$RC"; then
+    # Full rc but no ActionProperties block at all: add one before </gui>.
+    awk -v name="$NAME" '
+      !done && /<\/gui>/ {
+        print " <ActionProperties scheme=\"Default\">"
+        print "        <Action name=\"" name "\" shortcut=\"Space\"/>"
+        print "        <Action name=\"toggle_selection_mode\" shortcut=\"none\"/>"
+        print " </ActionProperties>"
+        done=1
+      }
+      { print }
+    ' "$RC" > "$RC.tmp" && mv "$RC.tmp" "$RC"
+    changed=1
+  else
+    printf 'nimbus-quicklook-ensure: unrecognised rc shape at %s — Space not bound\n' "$RC" >&2
+  fi
+}
+ensure_rc
+
+exit 0

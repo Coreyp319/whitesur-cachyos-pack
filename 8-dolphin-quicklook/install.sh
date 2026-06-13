@@ -18,8 +18,13 @@
 # rc that carries the complete menu/toolbar structure at the right gui version;
 # a bare ActionProperties stub is silently discarded. We ship Dolphin 26.04's
 # rc (gui version 48) with two <Action> lines added — verified on this system.
-# If you've already customised Dolphin shortcuts (a local rc exists), we instead
-# merge those two lines into your file and back the original up to .orig.
+#
+# Why a login service and not just a one-time edit: dolphinui.rc is a file
+# *Dolphin* owns — it rewrites it on exit and on any shortcut/toolbar change, and
+# KDE can regenerate it on a Dolphin update — so the binding silently drifts away
+# between restarts. So we install nimbus-quicklook-ensure (idempotent; owns the
+# rc migrate/insert logic) + a systemd-user oneshot that re-asserts all three
+# legs of the binding at every login. A pre-existing rc is backed up to .orig.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 [ "$(id -u)" -eq 0 ] && { echo "Run as your normal user, not root."; exit 1; }
@@ -30,9 +35,14 @@ ok(){   printf '  \033[32m✓\033[0m %s\n' "$1"; }
 msg(){  printf '\n\033[1m:: %s\033[0m\n' "$1"; }
 warn(){ printf '  \033[33m!\033[0m %s\n' "$1"; }
 
-SVC="$HOME/.local/share/kio/servicemenus/nimbus-quicklook.desktop"
+SVC_DIR="$HOME/.local/share/kio/servicemenus"
+SVC="$SVC_DIR/nimbus-quicklook.desktop"
+OLD_SVC="$SVC_DIR/whitesur-quicklook.desktop"    # pre-rebrand name (v0.1.x) — migrate away
 RC_DIR="$HOME/.local/share/kxmlgui5/dolphin"     # KF6 keeps the kxmlgui5 dir name
 RC="$RC_DIR/dolphinui.rc"
+SEED="$HOME/.local/share/nimbus-quicklook/dolphinui.rc"  # canonical full rc the helper reseeds from
+BIN="$HOME/.local/bin/nimbus-quicklook-ensure"
+UNIT="nimbus-quicklook-ensure.service"
 NAME='servicemenu_nimbus-quicklook.desktop::quickLook'   # ServiceMenuShortcutManager naming
 
 # --- 1. previewer: kiview from git master (built via the bundled PKGBUILD) ----
@@ -54,31 +64,39 @@ fi
 
 # --- 2. the Dolphin service menu (the action Space will trigger) -------------
 msg "Installing the Quick Look service menu…"
+# Drop the pre-rebrand whitesur-quicklook.desktop so it can't double the menu
+# entry or leave the rc pointing at a now-absent action.
+[ -e "$OLD_SVC" ] && { rm -f "$OLD_SVC"; ok "removed pre-rebrand whitesur-quicklook.desktop"; }
 # Must be executable: KIO refuses to run a user service menu carrying Exec=
 # unless the file is marked executable ("not authorized" otherwise).
 install -Dm755 "$HERE/nimbus-quicklook.desktop" "$SVC"
 kbuildsycoca6 >/dev/null 2>&1 || true
 ok "Quick Look entry added to Dolphin's right-click menu"
 
-# --- 3. bind Space to it, scoped to Dolphin ---------------------------------
-msg "Binding Space → Quick Look (inside Dolphin only)…"
-mkdir -p "$RC_DIR"
-if [ ! -f "$RC" ]; then
-  install -m644 "$HERE/dolphinui.rc" "$RC"
-  ok "installed Dolphin UI rc with Space → Quick Look"
+# --- 3. bind Space, and keep it bound across every restart -------------------
+# The binding lives in dolphinui.rc, a file Dolphin OWNS and rewrites on exit /
+# on any shortcut change, and that KDE can regenerate on a Dolphin update — so a
+# one-shot edit here does not survive. Instead we install a self-contained helper
+# + a systemd-user oneshot that re-asserts the binding at every login, and run it
+# once now. The helper owns the rc migrate/insert logic (one source of truth).
+msg "Binding Space → Quick Look and arming login persistence…"
+# Seed: the canonical full rc the helper reseeds from if dolphinui.rc goes missing.
+install -Dm644 "$HERE/dolphinui.rc" "$SEED"
+# Back up the user's pre-existing rc once, so revert can restore it verbatim.
+[ -f "$RC" ] && [ ! -f "$RC.orig" ] && cp "$RC" "$RC.orig"
+# The helper (re-assert all three legs) + the login unit that runs it.
+install -Dm755 "$HERE/bin/nimbus-quicklook-ensure" "$BIN"
+install -Dm644 "$HERE/systemd/$UNIT" "$HOME/.config/systemd/user/$UNIT"
+if systemctl --user daemon-reload 2>/dev/null; then
+  # enable → runs at every future login;  --now → runs it once right here, which
+  # is what actually writes the Space binding into the rc.
+  systemctl --user enable --now "$UNIT" 2>/dev/null \
+    && ok "Space bound + login-persistence service armed ($UNIT)" \
+    || { "$BIN" || true; ok "Space bound (service enable deferred — no user bus?)"; }
 else
-  [ -f "$RC.orig" ] || cp "$RC" "$RC.orig"
-  if grep -q "$NAME" "$RC"; then
-    ok "Quick Look binding already present"
-  elif grep -q '</ActionProperties>' "$RC"; then
-    # insert our two lines just before the first </ActionProperties>
-    awk -v ins="        <Action name=\"$NAME\" shortcut=\"Space\"/>\n        <Action name=\"toggle_selection_mode\" shortcut=\"none\"/>" '
-      !done && /<\/ActionProperties>/ { print ins; done=1 }
-      { print }' "$RC" > "$RC.tmp" && mv "$RC.tmp" "$RC"
-    ok "merged binding into your existing dolphinui.rc (backup: dolphinui.rc.orig)"
-  else
-    warn "no <ActionProperties> block in your dolphinui.rc — assign Space by hand (see below)"
-  fi
+  # No user systemd bus (e.g. over plain ssh): bind now, persistence on next login.
+  "$BIN" || true
+  warn "systemd --user unavailable now; binding applied, persistence arms at next login"
 fi
 
 # --- 4. window polish: make the kiview popup borderless (KWin rule) ----------
@@ -121,10 +139,10 @@ cat <<'DONE'
        the folder; Return opens it. (Selection Mode loses its
        Space shortcut — it's still on the toolbar button.)
 
-       If Space doesn't preview (e.g. a different Dolphin
-       version), assign it once by hand — it sticks after that:
-         Dolphin → Settings → Configure Keyboard Shortcuts
-           → "Context Menu Actions" → "Quick Look" → set Space.
+       The binding is re-asserted at every login by
+       nimbus-quicklook-ensure.service, so it survives Dolphin
+       and KDE updates. To re-apply by hand any time:
+         nimbus-quicklook-ensure   (then restart Dolphin)
 
        Revert:  ./revert.sh   (--purge also removes kiview-git)
    ────────────────────────────────────────────────────────────

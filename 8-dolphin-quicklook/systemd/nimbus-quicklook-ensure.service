@@ -1,0 +1,11 @@
+[Unit]
+Description=Re-assert the Dolphin Quick Look (Space) binding at login
+# The binding lives in a KXmlGui rc Dolphin owns and rewrites; this oneshot
+# verifies it every login, before you open Dolphin. See nimbus-quicklook-ensure.
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/nimbus-quicklook-ensure
+
+[Install]
+WantedBy=default.target
