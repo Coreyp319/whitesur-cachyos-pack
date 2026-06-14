@@ -104,13 +104,23 @@ revert on regression; **ledger every accept**; keep the last-good capture as the
 **never edit the `if rt {…}` RT/DLSS branches**; **don't judge on the live wallpaper** (a
 layer-shell surface can't be screenshotted — always capture windowed).
 
-## Making an accepted tuning go live (the widen step — not yet wired)
-Accepted knobs sit in `~/.nimbus/hexen-tune/tuning.json`. They affect a run **only when
-`NIMBUS_FLUX_HEXEN_TUNING` points at that file** (the capture loop sets it; the default is
-still the hardcoded values, by design). To make the **live wallpaper** honour them, set that
-env in `~/.local/bin/nimbus-flux-wallpaper` before `setsid …`, and do a final `--release`
-build so the optimized binary goes live. Kept env-gated on purpose so an in-progress tuning
-never surprises the live desktop or the DLSS session.
+## Making an accepted tuning go live (wired — explicit promotion)
+Promotion is **explicit**, so an in-flight tune never surprises the desktop:
+```bash
+./hexen-tune.py go-live        # copy last-good.json -> live.json (promote)
+./hexen-tune.py go-live --off  # remove live.json (back to hardcoded defaults)
+```
+The launcher (`wallpaper-plugin/nimbus-flux-wallpaper.sh`) exports
+`NIMBUS_FLUX_HEXEN_TUNING=~/.nimbus/hexen-tune/live.json` for the hexen scene **when that
+file exists**; the renderer clamps every field and falls back to defaults if it's
+missing/invalid. Takes effect on the **next wallpaper (re)start** (the running wallpaper is
+left alone). **⚠️ RT/raster transfer:** the live wallpaper runs the **RT** path, so only the
+**path-shared** knobs carry over — materials (`wall_roughness/depth`, `floor_roughness/depth`),
+parallax, and fog (`fog_density`, `fogvolume_density`). The **raster-only lighting** knobs
+(`moonlight`, `ambient`) live in `if rt {…}`/ambient-fill branches and **do not affect the RT
+wallpaper** — the loop tunes them for the windowed capture only. (Don't do a plain
+`cargo build --release` to "go live": that would shadow the DLSS session's `--features dlss`
+release binary the launcher picks by mtime — release builds are theirs, via `run.sh`.)
 
 ## Status
 - 2026-06-14 (spike): proved the data-driven path mechanically (two JSON values, **one
@@ -128,7 +138,14 @@ never surprises the live desktop or the DLSS session.
   swapchain) under `ScheduleRunnerPlugin` → the live-RT-wallpaper contention is gone
   (windowed 0/5 → headless 5/5). Capstone run: gemma proposed more fog, **qwen judged it
   WORSE and the loop reverted** — reliable capture + discriminating judge, end-to-end.
-- **Open:** the `HexenTuning` Rust (8 knobs, in the DLSS session's untracked `scene_hexen.rs`)
-  is built/verified **on disk but uncommitted** — commit it in their next sync. The accepted
-  tuning is still inert on the live wallpaper until the launcher exports
-  `NIMBUS_FLUX_HEXEN_TUNING` (the go-live step). `main.rs` headless support IS committed.
+- 2026-06-14 (go-live wired): all Rust now **committed** (the concurrent session committed
+  the base `HexenTuning`; the 8-knob widening + headless capture committed on top, raster-only).
+  `hexen-tune.py go-live` promotes `last-good → live.json`; the launcher exports
+  `NIMBUS_FLUX_HEXEN_TUNING` for hexen when it exists (verified by parts; applies on next
+  wallpaper restart, running wallpaper left alone). No `--release` build (would shadow the
+  DLSS release binary).
+- **Open / next:** (a) the loop tunes **raster**, but the live wallpaper is **RT** — only
+  shared material/fog knobs transfer; closing that gap means tuning the RT path (the DLSS
+  session's territory, grainy pre-DLSS). (b) accumulate transferable material/fog improvements
+  via `hexen-autotune.py` (qwen judge is strict — that's the point). (c) widen to torch
+  knobs (needs a `spawn_torch` signature change).

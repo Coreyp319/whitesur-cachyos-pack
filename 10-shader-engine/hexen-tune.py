@@ -54,6 +54,7 @@ LASTGOOD = STATE / "last-good.json"
 BASELINE = STATE / "baseline.png"
 CAPTURES = STATE / "captures"
 LEDGER = STATE / "ledger.jsonl"
+LIVE = STATE / "live.json"  # the tuning promoted to the live wallpaper (go-live)
 FRAME = Path("/tmp/nimbus-flux-frame.png")  # where capture-mode writes
 
 # Repo layout: this script sits in 10-shader-engine/; the crate is ./nimbus-flux.
@@ -314,6 +315,27 @@ def read_ledger() -> list[dict]:
     return recs
 
 
+def cmd_golive(args) -> int:
+    """Promote the last-good tuning to the live wallpaper (or `--off` to revert to defaults).
+
+    The launcher (`nimbus-flux-wallpaper.sh`) exports `NIMBUS_FLUX_HEXEN_TUNING=live.json`
+    when this file exists, so promotion is explicit and never auto-applies an in-flight tune.
+    Takes effect on the NEXT wallpaper (re)start — the running wallpaper is left alone."""
+    if args.off:
+        LIVE.unlink(missing_ok=True)
+        print("go-live OFF — removed live.json; the wallpaper reverts to the hardcoded "
+              "defaults on its next (re)start.")
+        return 0
+    lg = lastgood()
+    save_json(LIVE, lg)
+    print(f"promoted to live: {fmt(lg)}")
+    print(f"  wrote {LIVE}")
+    print("  takes effect on the NEXT wallpaper (re)start. NOTE: the wallpaper runs RT, so "
+          "only path-shared knobs (materials/parallax/fog) show; raster-only lighting "
+          "(moonlight, ambient) does not affect the RT path.")
+    return 0
+
+
 def cmd_knobs(args) -> int:
     """Emit the knob surface as JSON — the single source the autotuner reads for ranges
     + validation (so the table isn't re-declared in the driver)."""
@@ -362,11 +384,14 @@ def main() -> int:
     sub.add_parser("ledger", help="print the full accept ledger")
     sub.add_parser("knobs", help="emit the knob surface (ranges/defaults) as JSON")
 
+    g = sub.add_parser("go-live", help="promote last-good to the live wallpaper (or --off)")
+    g.add_argument("--off", action="store_true", help="remove live.json (revert to defaults)")
+
     args = ap.parse_args()
     return {
         "show": cmd_show, "set": cmd_set, "capture": cmd_capture,
         "accept": cmd_accept, "revert": cmd_revert, "ledger": cmd_ledger,
-        "knobs": cmd_knobs,
+        "knobs": cmd_knobs, "go-live": cmd_golive,
     }[args.cmd](args)
 
 
