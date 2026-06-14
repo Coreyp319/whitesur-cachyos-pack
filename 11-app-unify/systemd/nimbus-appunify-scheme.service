@@ -1,0 +1,9 @@
+[Unit]
+Description=Set the Flatpak GTK_THEME override to match the active KDE light/dark scheme
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/nimbus-appunify-scheme.sh
+
+[Install]
+WantedBy=default.target

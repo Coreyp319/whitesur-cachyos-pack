@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch KDE color-scheme changes to re-theme Flatpak apps (light/dark)
+
+[Path]
+# kdeglobals is rewritten whenever the color scheme / look-and-feel changes.
+PathChanged=%h/.config/kdeglobals
+Unit=nimbus-appunify-scheme.service
+
+[Install]
+WantedBy=default.target

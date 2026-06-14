@@ -15,3 +15,4 @@
 8    | 8-dolphin-quicklook  | no   | install.sh                 | revert.sh | Space previews the selection via kiview (Quick Look)
 9    | 9-gpu-effects        | no   | install.sh -y              | revert.sh | Glass blur fork + GLSL shaders + interactive aurora wallpaper
 10   | 10-shader-engine     | no   | install.sh                 | revert.sh | Standalone bevy/wgpu GPU fluid engine (Nimbus Flux)
+11   | 11-app-unify         | no   | install.sh -y              | revert.sh | Cross-app uniformity — browsers, Electron, Flatpak share the WhiteSur frame/theme
