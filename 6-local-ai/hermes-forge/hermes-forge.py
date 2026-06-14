@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["mcp>=1.2"]
+# dependencies = ["mcp>=1.2", "pillow>=10"]
 # ///
 """hermes-forge — drive the local Hermes model to author Blender hero assets over MCP.
 
@@ -72,12 +72,29 @@ def snapshot(outdir: Path) -> dict:
     return {p: p.stat().st_size for p in outdir.rglob("*") if p.is_file()}
 
 
-def verify_delta(before: dict, after: dict) -> list:
-    out = []
-    for p, sz in after.items():
-        if sz > 0 and before.get(p) != sz:
-            out.append(f"{p.name} ({sz} bytes)")
-    return out
+def changed_files(before: dict, after: dict) -> list:
+    return [p for p, sz in after.items() if sz > 0 and before.get(p) != sz]
+
+
+def image_content_report(path: Path) -> str:
+    """Reject blank renders: a non-zero PNG can still be a flat/white/transparent frame.
+    Returns ' content OK ...' or ' WARNING: ...' so the model gets actionable feedback."""
+    try:
+        from PIL import Image, ImageStat
+    except Exception:
+        return ""  # PIL unavailable — fall back to size-only verify
+    try:
+        im = Image.open(path).convert("RGBA")
+    except Exception as e:
+        return f" (content-check skipped: {e})"
+    rgb_std = max(ImageStat.Stat(im).stddev[:3])
+    a_lo, a_hi = im.getchannel("A").getextrema()
+    if a_hi == 0:
+        return " WARNING: render is fully TRANSPARENT — no subject in frame. Aim the camera at the object and re-render."
+    if rgb_std < 3.0:
+        return (" WARNING: render appears BLANK/uniform (subject offscreen, world flat, or exposure blown to white). "
+                "Frame the camera on the object, use a dark/transparent world, keep emission moderate, then re-render.")
+    return f" content OK (rgb_stddev={rgb_std:.0f})"
 
 
 def tool_text(result) -> str:
@@ -130,9 +147,20 @@ async def run(args) -> int:
                 if content:
                     log(f"step {step} · Hermes: {content[:200]}")
                 if not calls:
-                    log(f"done after {step} step(s).")
-                    print("\n=== FINAL ===\n" + (content or "(no summary)"))
-                    return 0
+                    if content:
+                        log(f"done after {step} step(s).")
+                        print("\n=== FINAL ===\n" + content)
+                        return 0
+                    # Empty turn (reasoning model may emit a thinking-only message) — nudge, don't quit.
+                    thinking = (msg.get("thinking") or "").strip()
+                    if thinking:
+                        log(f"step {step} · (thinking only) {thinking[:160]}")
+                    log(f"step {step} · empty turn — nudging to act")
+                    messages.append({"role": "user", "content":
+                        "You returned no tool call and no answer. Either call a tool to make progress now, "
+                        "or — only if the asset is built AND the harness verified a non-blank file — reply "
+                        "with a one-line final summary."})
+                    continue
 
                 for call in calls:
                     fn = call.get("function", {})
@@ -162,16 +190,28 @@ async def run(args) -> int:
                         result_text = f"ERROR calling {name}: {e}"
 
                     if render:
-                        new = verify_delta(before, snapshot(outdir))
-                        if new:
-                            result_text += "\n[harness verify] new output file(s): " + ", ".join(new)
-                            log("  ✓ verified: " + ", ".join(new))
-                        else:
+                        new_paths = changed_files(before, snapshot(outdir))
+                        if not new_paths:
                             result_text += (
                                 f"\n[harness verify] WARNING: no new non-empty file in {outdir}. "
                                 "The render/export did NOT write to disk. Fix: filepath must be an "
                                 "absolute path inside the output dir, and os.makedirs(dir, exist_ok=True) first.")
                             log("  ! verify: nothing written")
+                        else:
+                            parts, blank = [], False
+                            for p in new_paths:
+                                entry = f"{p.name} ({p.stat().st_size} bytes)"
+                                if p.suffix.lower() == ".png":
+                                    rep = image_content_report(p)
+                                    entry += rep
+                                    blank = blank or ("WARNING" in rep)
+                                parts.append(entry)
+                            summary = "; ".join(parts)
+                            result_text += "\n[harness verify] output: " + summary
+                            if blank:
+                                log("  ! verify: file written but BLANK — " + summary)
+                            else:
+                                log("  ✓ verified: " + summary)
                     messages.append({"role": "tool", "tool_name": name, "content": result_text})
 
             log(f"hit max-steps ({args.max_steps}) without a final answer.")

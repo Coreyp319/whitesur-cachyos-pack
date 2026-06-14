@@ -103,5 +103,27 @@ For the hero money-shot, Claude lanes still win (14B/36B bpy quality trails Clau
 3. **Scheduling:** how a Hermes lane interleaves with Claude lanes on the shared GPU.
 
 ## 11. Next step
-Green-light Phase 1: build `hermes-forge.py` (Option B) + `forge-prompt.md`, prove a
-full create→render→verify loop on a dedicated lane (e.g. `NIMBUS_BLENDER_PORT=9879`).
+~~Green-light Phase 1~~ **DONE** — see §12.
+
+## 12. Phase-1 result (2026-06-14)
+Built `hermes-forge.py`, `forge-prompt.md`, `doctor.sh`; doctor all-green. **Loop proven
+end-to-end** against a live Blender: harness ↔ stdio MCP ↔ Blender (22 tools), the Hermes
+tool-calling loop, GPU-yield (unload during render), and **self-correction from harness error
+feedback** (Hermes fixed real bpy errors — `clear()` missing, "no camera" — across steps). The
+first run wrote a verified `hero_core.png` end-to-end.
+
+Findings folded into the harness:
+- **verify-by-file was too weak** — a non-zero PNG can still be a blank/white/transparent frame
+  (the first render was 16 KB and blank). Added a Pillow content check (RGB stddev + alpha) that
+  rejects blank renders so the model is told to reframe and retry.
+- **reasoning model emits empty turns** — termination now requires a real final answer; an empty
+  turn is nudged, not treated as "done."
+- **GPU:** two concurrent flatpak Blender instances don't reliably initialise on one 24 GB GPU —
+  the second instance's socket never came up. Confirms the time-share conclusion: run **one** lane
+  at a time on this box.
+- **Privacy:** the blender-mcp addon POSTs telemetry to a third-party Supabase endpoint on every
+  connect/tool call. Consider disabling it for forge use.
+
+Open gap → **Phase 2:** the 14B's free-form `bpy` quality is the bottleneck (blank framing, bpy API
+slips like `objects.clear()`), exactly as predicted — not a harness problem. Fix via a known-good
+`bpy` skeleton/few-shot for the model to fill in, lower temperature, or the 36B.

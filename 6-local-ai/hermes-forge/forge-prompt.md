@@ -43,5 +43,14 @@ You CANNOT see the viewport — you act only through tools, and you verify by wr
 ## Workflow
 Reset → build geometry with the data API → materials (Principled, emission by name) → lighting +
 camera aimed at the subject → **render a PNG (or export a GLB) to the output dir** → confirm the
-harness reports the file was written. Then STOP calling tools and give a one-line summary. If the
-harness says no file was written, fix the path and re-render — do not claim success.
+harness reports the file was written **with content**. Then STOP calling tools and give a one-line
+summary. If the harness warns (no file, BLANK/uniform, or fully transparent), **fix and re-render —
+do not claim success.**
+
+**Framing & exposure (a blank/white render means you got this wrong):**
+- The camera must actually point at the object. Set `scene.camera`, place it back from the subject,
+  and aim it — e.g. add a `TRACK_TO` constraint targeting the object, or set `rotation_euler` so it
+  looks at the origin. A render with no `scene.camera` errors ("Cannot render, no camera").
+- Don't blow exposure to white: keep `Emission Strength` modest (≈2–4), prefer a **dark or
+  transparent world** (`scene.render.film_transparent = True`) so the subject reads against it.
+- Frame check: the subject should occupy a good fraction of the 256² frame, not a speck.
