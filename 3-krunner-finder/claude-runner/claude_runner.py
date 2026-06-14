@@ -27,7 +27,7 @@ BUS_NAME = "dev.corey.krunner.claude"
 OBJ_PATH = "/krunner"
 IFACE = "org.kde.krunner1"
 
-CLAUDE_BIN = "/home/corey/.local/bin/claude"
+CLAUDE_BIN = ""   # templated by install.sh to `command -v claude` (empty = Ask-Claude hidden)
 TERMINAL = "konsole"
 
 # Local Hermes via Ollama. Both templated by install.sh: OLLAMA_BIN to the
