@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "license_required": "CC0",
+  "_note": "Single source of truth for the dreaming composer: the validator's enum (what the model may reference) AND the fetcher's download list. Every asset is CC0 from Poly Haven. Add a row here (not in code) to widen the model's vocabulary; dream-fetch.py pulls it, dream-apply.py allows it.",
+
+  "textures": {
+    "castle_brick_07":    { "category": "stone_wall",  "polyhaven": "castle_brick_07",    "license": "CC0" },
+    "medieval_blocks_02": { "category": "stone_floor", "polyhaven": "medieval_blocks_02", "license": "CC0" },
+    "castle_wall_slates": { "category": "stone_trim",  "polyhaven": "castle_wall_slates", "license": "CC0" }
+  },
+
+  "motifs": {
+    "gothic_nave":  { "floor": "medieval_blocks_02", "ceiling": "castle_wall_slates", "wall": "castle_brick_07",    "trim": "castle_wall_slates" },
+    "deep_vault":   { "floor": "castle_brick_07",    "ceiling": "castle_wall_slates", "wall": "medieval_blocks_02", "trim": "castle_wall_slates" },
+    "austere_hall": { "floor": "medieval_blocks_02", "ceiling": "medieval_blocks_02", "wall": "medieval_blocks_02", "trim": "castle_wall_slates" },
+    "industrial":   { "floor": "castle_brick_07",    "ceiling": "castle_brick_07",    "wall": "castle_brick_07",    "trim": "castle_brick_07" },
+    "overgrown":    { "floor": "medieval_blocks_02", "ceiling": "castle_wall_slates", "wall": "castle_wall_slates", "trim": "castle_brick_07" },
+    "crystalline":  { "floor": "castle_wall_slates", "ceiling": "castle_wall_slates", "wall": "castle_wall_slates", "trim": "medieval_blocks_02" }
+  },
+
+  "props": {
+    "marble_bust_01":     { "category": "statue",      "polyhaven": "marble_bust_01",     "license": "CC0", "bbox": [0.6, 1.0, 0.6], "y_base": 1.2, "scale_default": 1.6 },
+    "Barrel_01":          { "category": "container",   "polyhaven": "Barrel_01",          "license": "CC0", "bbox": [0.7, 1.0, 0.7], "y_base": 0.0, "scale_default": 1.0 },
+    "brass_candleholders":{ "category": "light_prop",  "polyhaven": "brass_candleholders","license": "CC0", "bbox": [0.4, 0.6, 0.4], "y_base": 0.0, "scale_default": 1.2 },
+    "Lantern_01":         { "category": "light_prop",  "polyhaven": "Lantern_01",         "license": "CC0", "bbox": [0.3, 0.5, 0.3], "y_base": 0.0, "scale_default": 1.0 },
+    "wooden_crate_01":    { "category": "container",   "polyhaven": "wooden_crate_01",    "license": "CC0", "bbox": [0.9, 0.9, 0.9], "y_base": 0.0, "scale_default": 1.0 },
+    "treasure_chest":     { "category": "container",   "polyhaven": "treasure_chest",     "license": "CC0", "bbox": [1.1, 0.7, 0.7], "y_base": 0.0, "scale_default": 1.4 },
+    "wine_barrel_01":     { "category": "container",   "polyhaven": "wine_barrel_01",     "license": "CC0", "bbox": [0.7, 1.0, 0.7], "y_base": 0.0, "scale_default": 1.0 },
+    "wooden_bucket_01":   { "category": "container",   "polyhaven": "wooden_bucket_01",   "license": "CC0", "bbox": [0.4, 0.5, 0.4], "y_base": 0.0, "scale_default": 1.0 },
+    "rock_07":            { "category": "rubble",      "polyhaven": "rock_07",            "license": "CC0", "bbox": [1.2, 0.8, 1.2], "y_base": 0.0, "scale_default": 1.4 },
+    "kite_shield":        { "category": "wall_prop",   "polyhaven": "kite_shield",        "license": "CC0", "bbox": [0.6, 1.0, 0.2], "y_base": 0.8, "scale_default": 1.0 }
+  },
+
+  "enums": {
+    "mood":              ["calm", "tense", "triumphant", "melancholy", "wondrous", "austere"],
+    "palette_direction": ["warmer", "cooler", "richer", "desaturated", "hold"]
+  }
+}
