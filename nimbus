@@ -204,11 +204,33 @@ cmd_update(){
   [ "$DRY" = 1 ] && printf '\n%s(dry run — nothing changed)%s\n' "$d" "$x"
 }
 
+cmd_preflight(){
+  local hard=0 warn=0 aur="" pv
+  pf_ok(){   printf '  %s✓%s %s\n' "$g" "$x" "$1"; }
+  pf_warn(){ printf '  %s!%s %s\n' "$y" "$x" "$1"; warn=$((warn + 1)); }
+  pf_fail(){ printf '  %s✗%s %s\n' "$r" "$x" "$1"; hard=$((hard + 1)); }
+  printf '%sPreflight — environment checks%s\n' "$b" "$x"
+  if [ "$(id -u)" -ne 0 ]; then pf_ok "running as a normal user"; else pf_fail "do NOT run as root — run as your normal user"; fi
+  if command -v pacman >/dev/null 2>&1; then pf_ok "Arch / CachyOS (pacman present)"; else pf_fail "not Arch-based — pacman not found"; fi
+  pv="$(plasmashell --version 2>/dev/null | grep -oE '[0-9]+' | head -1)"
+  if [ "${pv:-0}" -ge 6 ] 2>/dev/null; then pf_ok "KDE Plasma $pv"; else pf_warn "Plasma 6 not detected (got: ${pv:-none}) — the pack targets Plasma 6"; fi
+  if [ "${XDG_SESSION_TYPE:-}" = wayland ]; then pf_ok "Wayland session"; else pf_warn "not a Wayland session — GPU effects/shaders (layer 9/10) need Wayland"; fi
+  if command -v sudo >/dev/null 2>&1; then pf_ok "sudo available"; else pf_warn "sudo not found — system layers (1,3,4,5,6,7) need it"; fi
+  for h in paru yay; do command -v "$h" >/dev/null 2>&1 && { aur="$h"; break; }; done
+  if [ -n "$aur" ]; then pf_ok "AUR helper ($aur)"; else pf_warn "no AUR helper (paru/yay) — layers 8,9 fall back to building from source"; fi
+  echo
+  if [ "$hard" -gt 0 ]; then printf '  %s%d blocker(s)%s — resolve before installing.\n' "$r" "$hard" "$x"; return 1; fi
+  if [ "$warn" -gt 0 ]; then printf '  %s%d warning(s)%s — you can proceed; affected layers will warn or skip.\n' "$y" "$warn" "$x"
+  else printf '  %sall clear.%s\n' "$g" "$x"; fi
+  return 0
+}
+
 cmd_help(){
   cat <<EOF
 ${b}nimbus${x} — Nimbus CachyOS pack orchestrator
 
   ${b}nimbus list${x}                 list the layers
+  ${b}nimbus preflight${x}            check the environment (Arch / Plasma 6 / Wayland / sudo / AUR)
   ${b}nimbus status${x}               one-line health per layer (runs each doctor check)
   ${b}nimbus doctor${x} [id…]         detailed drift checks (all layers, or the given ids)
 
@@ -226,6 +248,7 @@ EOF
 
 case "${1:-help}" in
   list)               shift; cmd_list ;;
+  preflight)          shift; cmd_preflight ;;
   status)             shift; cmd_status "$@" ;;
   doctor)             shift; cmd_doctor "$@" ;;
   install)            shift; cmd_install "$@" ;;

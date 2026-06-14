@@ -74,6 +74,13 @@ cat <<'NOTICE'
 
 NOTICE
 
+# Gate on the environment before touching anything (blocks on hard failures like
+# root / non-Arch; warnings just print and proceed).
+if ! "$HERE/nimbus" preflight; then
+  echo; echo "Aborting — resolve the blocker(s) above, then re-run."; exit 1
+fi
+echo
+
 # Layer selection + install is driven by nimbus.layers (no duplicate ladder).
 # Bare `install.sh` -> per-layer [Y/n] prompts; `-y` -> all; `id…` -> those.
 "$HERE/nimbus" install "$@"

@@ -9,3 +9,7 @@
 # Python bytecode
 __pycache__/
 *.pyc
+
+# makepkg / AUR build output (if a PKGBUILD is ever built in-tree)
+*.pkg.tar.*
+*.src.tar.*
