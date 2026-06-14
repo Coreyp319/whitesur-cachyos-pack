@@ -4,7 +4,10 @@ A personal **CachyOS + KDE Plasma 6 (Wayland)** customization. Layers 1–4 turn
 stock install into a cohesive macOS-style desktop; Layers 5–6 add general system
 quality-of-life and a local AI stack that have nothing to do with the *look*;
 Layers 7–9 add Apple-style notifications, Dolphin Quick Look, and GPU shader
-effects. Nine independent layers — install any subset.
+effects; Layers 10–11 add a standalone bevy/wgpu shader engine and cross-app
+frame uniformity. **Eleven independent layers — install any subset**, plus an
+experimental **Layer 12** (a nightly local-AI "dreaming" composer that grows
+Layer 10's journey wallpaper).
 
 ```bash
 git clone https://github.com/Coreyp319/nimbus-cachyos-pack && cd nimbus-cachyos-pack
@@ -241,9 +244,13 @@ also removes the package, the built effect, the shader checkout, and the aurora 
 
 ### 10 · Shader engine  — `10-shader-engine/`
 A standalone **bevy/wgpu** GPU fluid/scene engine (*Nimbus Flux*) — the pack's
-"wow-ceiling" track, separate from the QML aurora and not part of the desktop
-install-everything flow. Runs as a live `wlr-layer-shell` wallpaper or a window.
-Its own dependencies and build/run notes live in `10-shader-engine/README.md`.
+"wow-ceiling" track, separate from the QML aurora. A registered layer, but a
+**heavier one**: its install builds a Rust release binary (~400 crates, a few
+minutes) and adds an app-menu launcher. Runs as a live `wlr-layer-shell` wallpaper
+or a window, and ships several scenes — the GPU fluid sim, a ray-traced
+(Solari/DLSS) **Hexen** dungeon, and the evolving **journey** wallpaper (which
+Layer 12 grows) — selectable from System Settings via its `wallpaper-plugin/`.
+Dependencies and build/run notes: `10-shader-engine/README.md`.
 
 ### 11 · Cross-app uniformity  — `11-app-unify/`
 The toolkit-native apps (Qt/Kvantum, GTK3/GTK4) already wear WhiteSur; this layer
@@ -273,6 +280,18 @@ tabs into the titlebar). See `11-app-unify/README.md`.
 
 Revert: `11-app-unify/revert.sh` restores every touched config from its snapshot and
 disarms the light/dark watcher; `--purge` resets the pack-owned Flatpak override.
+
+### 12 · Dreaming composer  — `12-dreaming/`  *(experimental)*
+A nightly local-AI **"dreaming" phase**: a Layer-6 model reflects on the day's
+signals (git activity, session, time of day) and composes the next **leg** of
+Layer 10's `journey` wallpaper — so the desktop becomes an endless, evolving
+journey you wake into each morning. The model only proposes high-level **knobs**;
+deterministic Python disposes — validating them into a `leg-NNN.json` the
+already-compiled bevy composer renders, every nightly change **ledgered and
+revertible** (the same propose/dispose trust boundary as Layer 6's UI-audit agent).
+Driven by `nightly-dream.sh` (digest → compose → apply). It rides on Layer 10 and
+is **not yet a standard install/revert layer** (not in `nimbus.layers`). See
+`12-dreaming/README.md`.
 
 ---
 
@@ -343,7 +362,7 @@ bash revert.sh --purge   # also deletes the installed overlay files
 
 ## Layout
 ```
-install.sh  revert.sh  README.md
+install.sh  revert.sh  nimbus  nimbus.layers  README.md
 1-base/            nimbus-cachyos-macos.sh
 2-settings-refine/ install.sh revert.sh icons/ kvantum/ systemd/ bin/
 3-krunner-finder/  install.sh revert.sh row-tweak/ claude-runner/
@@ -353,6 +372,7 @@ install.sh  revert.sh  README.md
 7-notifications/   install.sh revert.sh config.json style-{light,dark}.css bin/ systemd/ dbus/ demo/
 8-dolphin-quicklook/ install.sh revert.sh nimbus-quicklook.desktop dolphinui.rc PKGBUILD
 9-gpu-effects/     install.sh revert.sh interactive-bg/ launchpad/
-10-shader-engine/  install.sh revert.sh nimbus-flux/
+10-shader-engine/  install.sh revert.sh nimbus-flux/ wallpaper-plugin/ dream/
 11-app-unify/      install.sh revert.sh doctor.sh {firefox,chromium,electron,flatpak-theme}-{apply,restore}.sh bin/ systemd/
+12-dreaming/       nightly-dream.sh catalog.json skill/ tests/   (experimental — no install/revert yet)
 ```
