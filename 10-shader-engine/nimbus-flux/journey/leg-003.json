@@ -1,0 +1,55 @@
+{
+  "id": "leg-003",
+  "seed_from": "leg-002",
+  "day": "2026-06-16",
+  "theme": {
+    "palette": ["#2a1d12", "#cf7a31", "#8fa6d6"],
+    "motif": "the warm shrine, today",
+    "mood": "arrival"
+  },
+  "entry": { "at": [0.0, 2.6, 0.0],   "forward": [0.0, 0.0, -1.0], "up": [0.0, 1.0, 0.0], "aperture": [6.0, 5.2] },
+  "exit":  { "at": [0.0, 2.6, -48.0], "forward": [0.0, 0.0, -1.0], "up": [0.0, 1.0, 0.0], "aperture": [6.0, 5.2] },
+
+  "geometry": [
+    {
+      "kind": "corridor",
+      "length": 48.0,
+      "width": 6.0,
+      "height": 5.2,
+      "floor": "castle_wall_slates",
+      "ceiling": "medieval_blocks_02",
+      "wall": "castle_brick_07",
+      "trim": "castle_wall_slates",
+      "columns": true,
+      "col_spacing": 7.5,
+      "torch_color": [1.0, 0.57, 0.24]
+    }
+  ],
+
+  "props": [
+    { "model": "marble_bust_01",     "pos": [ 0.0, 1.3, -44.0], "rot_y": 0.0, "scale": 1.9 },
+    { "model": "treasure_chest",     "pos": [-0.85, 0.0, -41.7], "rot_y": 0.35, "scale": 1.5 },
+    { "model": "brass_candleholders","pos": [ 0.0, 1.3, -43.4], "scale": 1.3 },
+    { "model": "wine_barrel_01",     "pos": [ 2.3, 0.0, -14.0], "rot_y": 0.8 },
+    { "model": "wooden_bucket_01",   "pos": [-2.1, 0.0, -22.0], "rot_y": 1.5 }
+  ],
+
+  "lights": [
+    { "kind": "key",  "pos": [0.0, 3.2, -41.0], "color": [1.0, 0.72, 0.42], "intensity": 120000, "range": 14.0, "shadows": true, "volumetric": true },
+    { "kind": "glow", "pos": [0.0, 1.85, -43.4], "color": [1.0, 0.6, 0.28], "intensity": 26000, "range": 6.0 }
+  ],
+
+  "atmosphere": {
+    "clear": [0.018, 0.013, 0.010],
+    "fog_density": 0.007,
+    "fog_color": [0.020, 0.016, 0.013],
+    "ambient": [0.42, 0.52, 0.85],
+    "ambient_brightness": 44.0,
+    "moon_dir": [0.15, -0.9, -0.4],
+    "moon_color": [0.55, 0.65, 0.95],
+    "moon_illuminance": 860.0,
+    "fog_volume_density": 0.028
+  },
+
+  "provenance": { "from_signals": ["hand-authored frontier"], "model": "hand-authored", "model_notes": "newest leg = the frontier the camera wakes into; warm shrine focal so 'today' has presence" }
+}

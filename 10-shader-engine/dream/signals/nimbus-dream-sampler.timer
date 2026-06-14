@@ -1,0 +1,14 @@
+[Unit]
+Description=Nimbus dreaming — periodic day-signal shape sampler
+Documentation=file://%h/whitesur-cachyos-pack/10-shader-engine/dream/signals/README.md
+
+[Timer]
+# Start a couple of minutes after login, then tick every 2 minutes while the
+# session is up. Low-frequency on purpose — this only records coarse shape.
+OnStartupSec=2min
+OnUnitActiveSec=2min
+AccuracySec=30s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

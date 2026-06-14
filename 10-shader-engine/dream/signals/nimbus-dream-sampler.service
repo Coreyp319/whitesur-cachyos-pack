@@ -1,0 +1,9 @@
+[Unit]
+Description=Nimbus dreaming — sample day-signal shape (audio/window) for the wallpaper journey
+Documentation=file://%h/whitesur-cachyos-pack/10-shader-engine/dream/signals/README.md
+
+[Service]
+Type=oneshot
+# %h = the user's home; adjust if the pack lives elsewhere.
+ExecStart=/usr/bin/python3 %h/whitesur-cachyos-pack/10-shader-engine/dream/signals/sample-signals.py
+Nice=15

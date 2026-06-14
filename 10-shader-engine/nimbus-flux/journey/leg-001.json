@@ -1,0 +1,56 @@
+{
+  "id": "leg-001",
+  "seed_from": "leg-000",
+  "day": "2026-06-14",
+  "theme": {
+    "palette": ["#241a13", "#b56a2c", "#7d97cc"],
+    "motif": "deeper vault, the reward",
+    "mood": "pressing onward"
+  },
+  "entry": { "at": [0.0, 2.6, 0.0],   "forward": [0.0, 0.0, -1.0], "up": [0.0, 1.0, 0.0], "aperture": [6.0, 5.2] },
+  "exit":  { "at": [0.0, 2.6, -48.0], "forward": [0.0, 0.0, -1.0], "up": [0.0, 1.0, 0.0], "aperture": [6.0, 5.2] },
+
+  "geometry": [
+    {
+      "kind": "corridor",
+      "length": 48.0,
+      "width": 6.0,
+      "height": 5.2,
+      "floor": "castle_brick_07",
+      "ceiling": "castle_wall_slates",
+      "wall": "medieval_blocks_02",
+      "trim": "castle_wall_slates",
+      "columns": true,
+      "col_spacing": 7.5,
+      "torch_color": [1.0, 0.5, 0.26]
+    }
+  ],
+
+  "props": [
+    { "model": "treasure_chest",     "pos": [-2.1, 0.0, -24.0], "rot_y": 0.3, "scale": 1.4 },
+    { "model": "wine_barrel_01",     "pos": [ 2.3, 0.0, -12.0], "rot_y": 0.8 },
+    { "model": "wooden_bucket_01",   "pos": [ 2.0, 0.0, -15.5], "rot_y": 1.5 },
+    { "model": "brass_candleholders","pos": [-2.3, 0.0, -32.0], "scale": 1.2 },
+    { "model": "wooden_crate_01",    "pos": [ 2.25, 0.0, -34.0], "rot_y": 2.0 },
+    { "model": "rock_07",            "pos": [-1.6, 0.0, -40.0], "rot_y": 1.1, "scale": 1.5 }
+  ],
+
+  "lights": [
+    { "kind": "glow", "pos": [-2.0, 1.2, -24.0], "color": [1.0, 0.62, 0.30], "intensity": 40000, "range": 7.0, "volumetric": true },
+    { "kind": "glow", "pos": [-2.0, 1.6, -32.0], "color": [1.0, 0.60, 0.28], "intensity": 22000, "range": 6.0 }
+  ],
+
+  "atmosphere": {
+    "clear": [0.015, 0.013, 0.012],
+    "fog_density": 0.0075,
+    "fog_color": [0.017, 0.016, 0.016],
+    "ambient": [0.40, 0.50, 0.86],
+    "ambient_brightness": 38.0,
+    "moon_dir": [0.15, -0.9, -0.4],
+    "moon_color": [0.55, 0.65, 0.95],
+    "moon_illuminance": 820.0,
+    "fog_volume_density": 0.030
+  },
+
+  "provenance": { "from_signals": ["hand-authored continuation"], "model": "hand-authored", "model_notes": "proves the portal handoff + related-but-progressing drift before any AI" }
+}

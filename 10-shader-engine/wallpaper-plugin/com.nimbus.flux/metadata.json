@@ -1,0 +1,19 @@
+{
+    "KPackageStructure": "Plasma/Wallpaper",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "coreypreston@gmail.com",
+                "Name": "Corey Preston"
+            }
+        ],
+        "Category": "",
+        "Description": "Live GPU 3-D wallpaper — runs the Layer-10 Nimbus Flux bevy/wgpu engine (cyberpunk city, gothic dungeon, or fluid sim) on a window-reactive layer-shell surface. Selecting another wallpaper stops it.",
+        "Icon": "preferences-desktop-wallpaper",
+        "Id": "com.nimbus.flux",
+        "License": "GPL-3.0-or-later",
+        "Name": "Nimbus Flux (3D Engine)",
+        "Version": "0.1"
+    },
+    "X-KDE-ParentApp": "org.kde.plasmashell"
+}

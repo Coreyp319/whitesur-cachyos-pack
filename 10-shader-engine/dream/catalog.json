@@ -1,0 +1,51 @@
+{
+  "_about": "Vetted CC0/procedural asset catalog for the Layer-10 dreaming journey. The ONLY ids a leg manifest may reference; the validator denies everything else (cf. ui-audit allowlist). The fetcher can also drive its downloads from here. bbox is approximate (metres), to harden when bounds-aware placement lands.",
+  "version": 1,
+
+  "geometry_kinds": {
+    "corridor": {
+      "materials": ["floor", "ceiling", "wall", "trim"],
+      "params": {
+        "length":      { "min": 8.0,  "max": 120.0, "default": 48.0 },
+        "width":       { "min": 3.0,  "max": 14.0,  "default": 6.0 },
+        "height":      { "min": 3.0,  "max": 12.0,  "default": 5.2 },
+        "col_spacing": { "min": 3.0,  "max": 15.0,  "default": 7.5 }
+      }
+    }
+  },
+
+  "stone": {
+    "castle_brick_07":    { "category": "stone", "license": "CC0", "source": "polyhaven" },
+    "castle_wall_slates": { "category": "stone", "license": "CC0", "source": "polyhaven" },
+    "medieval_blocks_02": { "category": "stone", "license": "CC0", "source": "polyhaven" }
+  },
+
+  "models": {
+    "marble_bust_01":     { "category": "prop", "license": "CC0", "source": "polyhaven", "base_origin": false, "bbox": [0.6, 1.2, 0.6] },
+    "Barrel_01":          { "category": "prop", "license": "CC0", "source": "polyhaven", "base_origin": true,  "bbox": [0.8, 1.1, 0.8] },
+    "brass_candleholders":{ "category": "prop", "license": "CC0", "source": "polyhaven", "base_origin": true,  "bbox": [0.4, 0.5, 0.4] },
+    "Lantern_01":         { "category": "prop", "license": "CC0", "source": "polyhaven", "base_origin": true,  "bbox": [0.3, 0.6, 0.3] },
+    "wooden_crate_01":    { "category": "prop", "license": "CC0", "source": "polyhaven", "base_origin": true,  "bbox": [0.9, 0.9, 0.9] },
+    "treasure_chest":     { "category": "prop", "license": "CC0", "source": "polyhaven", "base_origin": true,  "bbox": [1.0, 0.7, 0.7] },
+    "wine_barrel_01":     { "category": "prop", "license": "CC0", "source": "polyhaven", "base_origin": true,  "bbox": [0.7, 1.0, 0.7] },
+    "wooden_bucket_01":   { "category": "prop", "license": "CC0", "source": "polyhaven", "base_origin": true,  "bbox": [0.4, 0.4, 0.4] },
+    "rock_07":            { "category": "prop", "license": "CC0", "source": "polyhaven", "base_origin": false, "bbox": [1.2, 0.9, 1.2] },
+    "kite_shield":        { "category": "prop", "license": "CC0", "source": "polyhaven", "base_origin": false, "bbox": [0.6, 1.0, 0.2] }
+  },
+
+  "light_kinds": ["torch", "key", "glow", "moon"],
+
+  "bounds": {
+    "prop_scale":         { "min": 0.1, "max": 6.0 },
+    "prop_pos_xz":        { "min": -8.0, "max": 8.0 },
+    "prop_pos_y":         { "min": -1.0, "max": 12.0 },
+    "light_intensity":    { "min": 0.0, "max": 400000.0 },
+    "light_range":        { "min": 0.5, "max": 40.0 },
+    "fog_density":        { "min": 0.0, "max": 0.05 },
+    "fog_volume_density": { "min": 0.0, "max": 0.2 },
+    "ambient_brightness": { "min": 0.0, "max": 200.0 },
+    "moon_illuminance":   { "min": 0.0, "max": 20000.0 },
+    "aperture_tol": 0.1,
+    "seam_tol": 0.05
+  }
+}

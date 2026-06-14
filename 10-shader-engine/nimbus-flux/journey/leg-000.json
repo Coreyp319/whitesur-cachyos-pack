@@ -1,0 +1,55 @@
+{
+  "id": "leg-000",
+  "seed_from": null,
+  "day": "seed",
+  "theme": {
+    "palette": ["#2a1d12", "#c9772f", "#8fa6d6"],
+    "motif": "torch-lit gothic nave",
+    "mood": "the seed corridor"
+  },
+  "entry": { "at": [0.0, 2.6, 0.0],   "forward": [0.0, 0.0, -1.0], "up": [0.0, 1.0, 0.0], "aperture": [6.0, 5.2] },
+  "exit":  { "at": [0.0, 2.6, -48.0], "forward": [0.0, 0.0, -1.0], "up": [0.0, 1.0, 0.0], "aperture": [6.0, 5.2] },
+
+  "geometry": [
+    {
+      "kind": "corridor",
+      "length": 48.0,
+      "width": 6.0,
+      "height": 5.2,
+      "floor": "medieval_blocks_02",
+      "ceiling": "castle_wall_slates",
+      "wall": "castle_brick_07",
+      "trim": "castle_wall_slates",
+      "columns": true,
+      "col_spacing": 7.5,
+      "torch_color": [1.0, 0.55, 0.22]
+    }
+  ],
+
+  "props": [
+    { "model": "marble_bust_01",  "pos": [-2.3, 1.2, -22.0], "rot_y": 0.5, "scale": 1.6 },
+    { "model": "wooden_crate_01", "pos": [ 2.2, 0.0, -10.0], "rot_y": 0.4 },
+    { "model": "Barrel_01",       "pos": [ 2.35, 0.0, -30.0], "rot_y": 1.1 },
+    { "model": "Lantern_01",      "pos": [-2.4, 0.0,  -6.0] },
+    { "model": "rock_07",         "pos": [ 1.7, 0.0, -38.0], "rot_y": 2.7, "scale": 1.4 }
+  ],
+
+  "lights": [
+    { "kind": "key",   "pos": [-1.8, 2.8, -22.0], "color": [1.0, 0.72, 0.42], "intensity": 60000, "range": 10.0, "shadows": true, "volumetric": true },
+    { "kind": "glow",  "pos": [-2.4, 0.6,  -6.0], "color": [1.0, 0.66, 0.32], "intensity": 24000, "range": 7.0 }
+  ],
+
+  "atmosphere": {
+    "clear": [0.018, 0.013, 0.010],
+    "fog_density": 0.007,
+    "fog_color": [0.020, 0.016, 0.013],
+    "ambient": [0.42, 0.52, 0.85],
+    "ambient_brightness": 42.0,
+    "moon_dir": [0.15, -0.9, -0.4],
+    "moon_color": [0.55, 0.65, 0.95],
+    "moon_illuminance": 850.0,
+    "fog_volume_density": 0.028
+  },
+
+  "provenance": { "from_signals": ["seed"], "model": "hand-authored", "model_notes": "port of the hexen corridor into the journey schema" }
+}
