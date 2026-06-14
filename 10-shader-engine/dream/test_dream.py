@@ -13,6 +13,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import dream
 import dreamlib
 
 HERE = Path(__file__).resolve().parent
@@ -141,6 +142,81 @@ def test_accept_revert_round_trip():
         # leg-000 (seed) is protected
         r = run("revert", "--apply")
         check("seed leg-000 protected from revert", (jdir / "leg-000.json").exists())
+
+
+def _seeded_journey(td):
+    jdir = Path(td)
+    seed = copy.deepcopy(GOOD); seed["id"] = "leg-000"; seed["seed_from"] = None
+    (jdir / "leg-000.json").write_text(json.dumps(seed), encoding="utf-8")
+    cand = jdir / "candidate.json"; cand.write_text(json.dumps(GOOD), encoding="utf-8")
+    return jdir, cand
+
+
+def _run(jdir, *a):
+    return subprocess.run([sys.executable, str(DREAM), "--journey", str(jdir), *a],
+                          capture_output=True, text=True)
+
+
+def test_trust_transitions():
+    t = dream.default_trust()
+    check("starts untrusted", t["auto"] is False and t["threshold"] == 3)
+    for _ in range(3):
+        dream.trust_approve(t)
+    check("auto unlocks after threshold approvals", t["auto"] is True and t["streak"] == 3)
+    dream.trust_reject(t)
+    check("reject revokes auto + resets streak", t["auto"] is False and t["streak"] == 0)
+    dream.trust_approve(t)
+    check("auto stays off until re-earned", t["auto"] is False and t["streak"] == 1)
+    dream.trust_revoke(t)
+    check("revoke resets", t["streak"] == 0 and t["auto"] is False)
+
+
+def test_stage_approve_round_trip():
+    with tempfile.TemporaryDirectory() as td:
+        jdir, cand = _seeded_journey(td)
+        r = _run(jdir, "stage", str(cand), "--apply")
+        check("stage --apply rc=0", r.returncode == 0, r.stderr)
+        check("staging written", (jdir / "staging.json").exists())
+        check("nothing landed on stage", not (jdir / "leg-001.json").exists())
+        r = _run(jdir, "approve", "--apply")
+        check("approve --apply rc=0", r.returncode == 0, r.stderr)
+        check("approve lands leg-001", (jdir / "leg-001.json").exists())
+        check("staging cleared after approve", not (jdir / "staging.json").exists())
+        check("ledger records approved provenance", '"via": "approved"' in (jdir / "ledger.jsonl").read_text())
+        tr = json.loads((jdir / "trust.json").read_text())
+        check("approval recorded in trust", tr["approved"] == 1 and tr["streak"] == 1)
+
+
+def test_land_stages_until_trusted_then_autos():
+    with tempfile.TemporaryDirectory() as td:
+        jdir, cand = _seeded_journey(td)
+        r = _run(jdir, "land", str(cand), "--apply")
+        check("land(untrusted) rc=0", r.returncode == 0, r.stderr)
+        check("land(untrusted) stages, no leg", (jdir / "staging.json").exists() and not (jdir / "leg-001.json").exists())
+        dream.save_trust(jdir, {**dream.default_trust(), "auto": True, "streak": 3})
+        r = _run(jdir, "land", str(cand), "--apply")
+        check("land(trusted) rc=0", r.returncode == 0, r.stderr)
+        check("land(trusted) auto-applies leg-001", (jdir / "leg-001.json").exists())
+        check("ledger records auto provenance", '"via": "auto"' in (jdir / "ledger.jsonl").read_text())
+
+
+def test_reject_and_revert_revoke_autonomy():
+    with tempfile.TemporaryDirectory() as td:
+        jdir, cand = _seeded_journey(td)
+        dream.save_trust(jdir, {**dream.default_trust(), "auto": True, "streak": 5})
+        _run(jdir, "stage", str(cand), "--apply")
+        r = _run(jdir, "reject", "--apply")
+        check("reject --apply rc=0", r.returncode == 0, r.stderr)
+        tr = json.loads((jdir / "trust.json").read_text())
+        check("reject revokes auto + resets streak", tr["auto"] is False and tr["streak"] == 0 and tr["rejected"] == 1)
+        check("staging cleared on reject", not (jdir / "staging.json").exists())
+        check("no leg landed on reject", not (jdir / "leg-001.json").exists())
+        # an auto-applied leg, then a revert → autonomy revoked
+        dream.save_trust(jdir, {**dream.default_trust(), "auto": True, "streak": 4})
+        _run(jdir, "land", str(cand), "--apply")
+        _run(jdir, "revert", "--apply")
+        tr = json.loads((jdir / "trust.json").read_text())
+        check("revert revokes auto", tr["auto"] is False and tr["streak"] == 0)
 
 
 def main() -> int:

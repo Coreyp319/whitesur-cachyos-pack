@@ -103,6 +103,20 @@ def test_compose_drops_unknown_prop():
     check("unknown prop dropped by guardrails", "spaceship_42" not in models and "wooden_crate_01" in models)
 
 
+def test_date_seed_deterministic():
+    s1 = compose.date_seed("2026-06-14")
+    s2 = compose.date_seed("2026-06-14")
+    s3 = compose.date_seed("2026-06-15")
+    check("seed stable for a given date", s1 == s2)
+    check("seed differs across dates", s1 != s3)
+    check("seed is a 32-bit int", isinstance(s1, int) and 0 <= s1 <= 0xFFFFFFFF)
+
+
+def test_compose_stamps_date_seed():
+    res = compose.compose(lambda m: GOOD_JSON, DIGEST, PREV, CATALOG, PREV["exit"], retries=2)
+    check("leg carries the date seed", res["candidate"].get("seed") == compose.date_seed(DIGEST["date"]))
+
+
 def main() -> int:
     for fn in sorted(k for k in globals() if k.startswith("test_")):
         try:

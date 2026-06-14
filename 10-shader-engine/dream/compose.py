@@ -169,6 +169,17 @@ def extract_json(text: str) -> Optional[dict]:
 # assemble: force the mechanical/seam-safe parts around the model's creativity
 # --------------------------------------------------------------------------- #
 
+def date_seed(date_str: Optional[str]) -> int:
+    """Stable 32-bit seed from the digest date (FNV-1a). Re-running a given day composes
+    the same leg — best-effort for the model (via the `seed` option), exact for the
+    assembled scaffolding — and gives future procedural geometry a deterministic base.
+    No RNG, no clock."""
+    h = 0x811c9dc5
+    for b in (date_str or "0000-00-00").encode("utf-8"):
+        h = ((h ^ b) * 0x01000193) & 0xFFFFFFFF
+    return h
+
+
 def _num(v, default):
     try:
         return float(v)
@@ -176,7 +187,7 @@ def _num(v, default):
         return default
 
 
-def assemble(raw: dict, prev_leg: Optional[dict], prev_exit: Optional[dict], catalog: dict, digest: dict, model: str) -> dict:
+def assemble(raw: dict, prev_leg: Optional[dict], prev_exit: Optional[dict], catalog: dict, digest: dict, model: str, seed: int = 0) -> dict:
     """Wrap the model's creative output in a seam-safe leg: portals + a constant cross-section
     (so the join always validates), inheriting width/height from the previous exit aperture."""
     corr_p = catalog.get("geometry_kinds", {}).get("corridor", {}).get("params", {})
@@ -217,6 +228,7 @@ def assemble(raw: dict, prev_leg: Optional[dict], prev_exit: Optional[dict], cat
     leg = {
         "id": "candidate",
         "seed_from": (prev_leg or {}).get("id"),
+        "seed": int(seed),
         "day": digest.get("date"),
         "theme": raw.get("theme", {}),
         "entry": {"at": [0.0, height / 2.0, 0.0], "forward": fwd, "up": [0.0, 1.0, 0.0], "aperture": ap},
@@ -251,7 +263,10 @@ def compose(
     prev_exit: Optional[dict],
     model: str = DEFAULT_MODEL,
     retries: int = 3,
+    seed: Optional[int] = None,
 ) -> dict:
+    if seed is None:
+        seed = date_seed(digest.get("date"))
     feedback = None
     last = {"ok": False, "reason": "no attempts made"}
     for attempt in range(1, retries + 1):
@@ -264,7 +279,7 @@ def compose(
             feedback = "Output was not valid JSON. Output ONLY a single JSON object, no prose."
             last = {"ok": False, "reason": "no JSON in model output", "attempts": attempt, "raw_text": content[:400]}
             continue
-        candidate = assemble(raw, prev_leg, prev_exit, catalog, digest, model)
+        candidate = assemble(raw, prev_leg, prev_exit, catalog, digest, model, seed)
         res = dreamlib.validate_leg(candidate, catalog, prev_exit)
         if not res["rejected"]:
             return {"ok": True, "candidate": res["sanitized"], "attempts": attempt, "issues": res["issues"]}
@@ -278,12 +293,15 @@ def compose(
 # --------------------------------------------------------------------------- #
 
 def ollama_chat(messages: list[dict], model: str, max_tokens: int = 8000, temperature: float = 0.6,
-                url: Optional[str] = None, timeout: int = 240) -> str:
+                url: Optional[str] = None, timeout: int = 240, seed: Optional[int] = None) -> str:
     url = url or os.environ.get("NIMBUS_DREAM_URL", DEFAULT_URL)
-    body = json.dumps({
+    payload = {
         "model": model, "messages": messages, "temperature": temperature,
         "max_tokens": max_tokens, "stream": False,
-    }).encode("utf-8")
+    }
+    if seed is not None:
+        payload["seed"] = int(seed)  # best-effort reproducibility (honored by Ollama's /v1)
+    body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         data = json.load(r)
@@ -329,10 +347,12 @@ def main() -> int:
     prev_exit = (prev_leg or {}).get("exit")
     digest = json.loads(Path(args.digest).read_text()) if args.digest else collect_digest.collect()
 
+    seed = date_seed(digest.get("date"))
     print(f"composing with {args.model} from digest "
-          f"(git={digest.get('git', {}).get('commits')} commits, {digest.get('intensity')}, {digest.get('part_of_day')})")
-    res = compose(lambda m: ollama_chat(m, args.model), digest, prev_leg, catalog, prev_exit,
-                  model=args.model, retries=args.retries)
+          f"(git={digest.get('git', {}).get('commits')} commits, {digest.get('intensity')}, "
+          f"{digest.get('part_of_day')}; seed={seed})")
+    res = compose(lambda m: ollama_chat(m, args.model, seed=seed), digest, prev_leg, catalog, prev_exit,
+                  model=args.model, retries=args.retries, seed=seed)
 
     if not res["ok"]:
         print(f"=> FAILED after {res.get('attempts', '?')} attempt(s): {res['reason']}")
