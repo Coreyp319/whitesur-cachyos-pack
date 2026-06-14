@@ -1,0 +1,15 @@
+[Unit]
+Description=Nimbus dreaming — nightly journey-leg composer
+Documentation=file://%h/whitesur-cachyos-pack/10-shader-engine/dream/README.md
+
+[Timer]
+# Compose one leg per day, late evening, so the digest reflects the FULL day just lived
+# (collect_digest scans git since local midnight → today's activity). Persistent=true means
+# if the machine was off at the scheduled time the run catches up at the next boot;
+# dream-cycle.sh is idempotent per day, so a catch-up never double-composes.
+OnCalendar=*-*-* 23:30:00
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

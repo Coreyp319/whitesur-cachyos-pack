@@ -11,15 +11,16 @@
 # retried timer never stacks duplicate legs. Pass --force to compose anyway.
 #
 # Env:
-#   NIMBUS_DREAM_MODEL      composer model (default qwen3.6-27b-64k; e.g. a hermes-* tag to
-#                           dream with Hermes — the composer is model-agnostic over Ollama /v1)
+#   NIMBUS_DREAM_MODEL      composer model (default hermes4-14b:latest — a small model fits
+#                           alongside the live RT wallpaper on one GPU; the 27B contends for
+#                           VRAM. Model-agnostic over Ollama /v1; set any tag to override.)
 #   NIMBUS_FLUX_JOURNEY_DIR journey dir (default: ../nimbus-flux/journey, the dir the wallpaper reads)
 #   NIMBUS_DREAM_URL        Ollama OpenAI-compatible endpoint (default localhost:11434/v1)
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 JOURNEY="${NIMBUS_FLUX_JOURNEY_DIR:-$HERE/../nimbus-flux/journey}"
-MODEL="${NIMBUS_DREAM_MODEL:-qwen3.6-27b-64k}"
+MODEL="${NIMBUS_DREAM_MODEL:-hermes4-14b:latest}"
 CAND="${TMPDIR:-/tmp}/nimbus-dream-candidate.json"
 today="$(date +%F)"
 force=0

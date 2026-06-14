@@ -26,6 +26,8 @@ import os
 import re
 import subprocess
 import sys
+import time
+import urllib.error
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -35,7 +37,11 @@ import collect_digest
 import dreamlib
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_MODEL = "qwen3.6-27b-64k"
+# A SMALL model is the right composer: the guardrails (validate_leg) enforce integrity, so the
+# model only needs sensible creative ideas — and a 14B fits alongside the live RT wallpaper on
+# one GPU, where the 27B contends for VRAM (cold-load 500s / slow-gen timeouts). Override with
+# $NIMBUS_DREAM_MODEL (any Ollama tag — it's model-agnostic).
+DEFAULT_MODEL = "hermes4-14b:latest"
 DEFAULT_URL = "http://localhost:11434/v1/chat/completions"
 DEFAULT_CANDIDATE = Path("/tmp/nimbus-dream-candidate.json")
 
@@ -293,7 +299,8 @@ def compose(
 # --------------------------------------------------------------------------- #
 
 def ollama_chat(messages: list[dict], model: str, max_tokens: int = 8000, temperature: float = 0.6,
-                url: Optional[str] = None, timeout: int = 240, seed: Optional[int] = None) -> str:
+                url: Optional[str] = None, timeout: int = 300, seed: Optional[int] = None,
+                retries: int = 3) -> str:
     url = url or os.environ.get("NIMBUS_DREAM_URL", DEFAULT_URL)
     payload = {
         "model": model, "messages": messages, "temperature": temperature,
@@ -302,10 +309,21 @@ def ollama_chat(messages: list[dict], model: str, max_tokens: int = 8000, temper
     if seed is not None:
         payload["seed"] = int(seed)  # best-effort reproducibility (honored by Ollama's /v1)
     body = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        data = json.load(r)
-    return data["choices"][0]["message"]["content"]
+    last: Exception | None = None
+    for attempt in range(1, retries + 1):
+        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                data = json.load(r)
+            return data["choices"][0]["message"]["content"]
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as e:
+            # Transient on a busy GPU: a model cold-load 500, a KV-cache OOM, or a slow-gen
+            # timeout — the local model contends with the live RT wallpaper for VRAM. Back off
+            # and retry; the nightly loop must not give up on the first hiccup.
+            last = e
+            if attempt < retries:
+                time.sleep(5 * attempt)
+    raise last
 
 
 # --------------------------------------------------------------------------- #

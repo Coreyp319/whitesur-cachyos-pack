@@ -1,0 +1,15 @@
+[Unit]
+Description=Nimbus dreaming — compose the next journey leg from today's activity
+Documentation=file://%h/whitesur-cachyos-pack/10-shader-engine/dream/README.md
+
+[Service]
+Type=oneshot
+# %h = the user's home; adjust if the pack lives elsewhere. dream-cycle.sh composes the
+# day's leg with the local model and lands it through the earned-autonomy ramp (auto-applies
+# only once trust is earned, else stages for approval). Idempotent per day. Best-effort: if
+# Ollama/the model is down it exits non-zero that night and no leg is produced — no harm.
+ExecStart=/usr/bin/env bash %h/whitesur-cachyos-pack/10-shader-engine/dream/dream-cycle.sh
+# Composer defaults to a small model (hermes4-14b) that fits alongside the live RT wallpaper.
+# Override here for a bigger one (only if you have the VRAM headroom):
+#   Environment=NIMBUS_DREAM_MODEL=qwen3.6-27b-64k:latest
+Nice=15

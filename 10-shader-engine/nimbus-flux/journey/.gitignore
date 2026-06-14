@@ -1,0 +1,6 @@
+# Journey runtime state — the journey's *content* is the committed leg-*.json; these are
+# generated/local and must not be committed (per-machine, mutated every cycle).
+ledger.jsonl
+trust.json
+staging.json
+*.tmp
