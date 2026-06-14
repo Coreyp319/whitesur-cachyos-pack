@@ -239,6 +239,41 @@ Revert: `9-gpu-effects/revert.sh` restores Layer 1's stock blur, turns the shade
 off, and switches the wallpaper back to whatever was active before the aurora; `--purge`
 also removes the package, the built effect, the shader checkout, and the aurora plugin.
 
+### 10 · Shader engine  — `10-shader-engine/`
+A standalone **bevy/wgpu** GPU fluid/scene engine (*Nimbus Flux*) — the pack's
+"wow-ceiling" track, separate from the QML aurora and not part of the desktop
+install-everything flow. Runs as a live `wlr-layer-shell` wallpaper or a window.
+Its own dependencies and build/run notes live in `10-shader-engine/README.md`.
+
+### 11 · Cross-app uniformity  — `11-app-unify/`
+The toolkit-native apps (Qt/Kvantum, GTK3/GTK4) already wear WhiteSur; this layer
+goes after the **hold-outs that draw their own UI** and ignore the system theme —
+Firefox, the Chromium family, Electron, and sandboxed Flatpak apps — using
+**durable** mechanisms only (no fragile `userChrome.css`, no `.crx` themes that
+break on browser updates). The lever is the **window frame**: every browser /
+Electron window is pushed onto the system WhiteSur titlebar so they share KWin's
+Aurorae traffic-lights instead of each drawing its own. Per family:
+- **Firefox** — `browser.tabs.inTitlebar=0` (system frame) + follow the system
+  light/dark, written as a marked block in the profile's `user.js`.
+- **Chromium / Chrome / Brave / Vivaldi / Edge** — `custom_chrome_frame=false`
+  (system frame) + `system_theme=1` (**GTK** colours; KDE often defaults to `2`=Qt,
+  the real mismatch), JSON-merged into each profile's `Preferences` (the browser
+  must be **closed** — it rewrites that file on exit).
+- **Electron** — VS Code `window.titleBarStyle=native`, plus a global Wayland hint
+  for the rest. Self-framing apps (Discord/Spotify) have no durable switch — left alone.
+- **Flatpak** — exposes the host WhiteSur theme into the sandbox + sets `GTK_THEME`,
+  re-flipped on the light/dark toggle by a `kdeglobals` path-watcher (same pattern
+  as Layer 2's icon watcher).
+
+Each family is opt-in, every touched key's prior value is snapshotted, and
+`doctor.sh` drift-checks only the families you chose. Honest ceiling:
+GTK4/libadwaita Flatpaks only follow light/dark (Adwaita by design), and "system
+titlebar everywhere" is more Linux-uniform than macOS-authentic (real Safari merges
+tabs into the titlebar). See `11-app-unify/README.md`.
+
+Revert: `11-app-unify/revert.sh` restores every touched config from its snapshot and
+disarms the light/dark watcher; `--purge` resets the pack-owned Flatpak override.
+
 ---
 
 ## Requirements
@@ -258,7 +293,7 @@ also removes the package, the built effect, the shader checkout, and the aurora 
 
 ## Reverting everything
 ```bash
-bash revert.sh           # layers 2–9 fully; layer 1 prints manual steps
+bash revert.sh           # layers 2–11 fully; layer 1 prints manual steps
 bash revert.sh --purge   # also deletes the installed overlay files
 ```
 
@@ -273,5 +308,7 @@ install.sh  revert.sh  README.md
 6-local-ai/        install.sh revert.sh Modelfile.hermes4-14b Modelfile.hermes4.3-36b
 7-notifications/   install.sh revert.sh config.json style-{light,dark}.css bin/ systemd/ dbus/ demo/
 8-dolphin-quicklook/ install.sh revert.sh nimbus-quicklook.desktop dolphinui.rc PKGBUILD
-9-gpu-effects/     install.sh revert.sh
+9-gpu-effects/     install.sh revert.sh interactive-bg/ launchpad/
+10-shader-engine/  install.sh revert.sh nimbus-flux/
+11-app-unify/      install.sh revert.sh doctor.sh {firefox,chromium,electron,flatpak-theme}-{apply,restore}.sh bin/ systemd/
 ```
