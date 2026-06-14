@@ -13,3 +13,8 @@ __pycache__/
 # makepkg / AUR build output (if a PKGBUILD is ever built in-tree)
 *.pkg.tar.*
 *.src.tar.*
+
+# Blender MCP forge — per-session runtime state + render scratch (never source;
+# the lane/port is ephemeral env, the committed products are hero_core.{png,glb})
+.blender-mcp/
+*.blend1

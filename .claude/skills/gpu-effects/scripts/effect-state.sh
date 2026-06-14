@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Inspect the live state of KWin GPU blur/shader effects. Read-only.
-# Used by the kwin-gpu-effects skill as its "check first" step.
+# Used by the gpu-effects skill as its "check first" step.
 set -uo pipefail
 
 bold(){ printf '\033[1m%s\033[0m\n' "$1"; }

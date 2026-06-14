@@ -1,5 +1,5 @@
 ---
-name: kwin-gpu-effects
+name: gpu-effects
 description: >-
   Work with the pack's GPU shader effects on KDE Plasma 6 / Wayland (CachyOS / Arch):
   the blur forks (Better Blur/forceblur, Glass) and kwin-effect-shaders (enable/disable/
@@ -7,25 +7,58 @@ description: >-
   `com.nimbus.aurora` wallpaper and its styles (incl. the multi-pass "Liquid" GPU fluid
   via RGBA16F ShaderEffectSource feedback) and cursor/music/window reactivity; and the
   standalone Layer-10 bevy/wgpu fluid engine (nimbus-flux). Diagnose no-blur /
-  changes-do-nothing / stutter / build issues. Use whenever the user wants to change
-  desktop blur, frosted glass, rounded corners, sharpening (CAS), color grading, the
-  animated/reactive wallpaper, a GPU fluid sim, or any GPU UI/shader effect.
+  changes-do-nothing / stutter / build issues. Also carries expert design/UI/UX
+  judgment (`reference/design-ux.md`): Apple HIG deference/clarity/depth, the
+  materials & vibrancy ladder, legible glassmorphism (WCAG contrast, scrim, blur),
+  depth/hierarchy, motion timing & easing tables, accessibility (reduced
+  transparency/motion), and when an effect serves the UI vs. is vanity. Also carries the
+  **Blender hero-asset pipeline** (`reference/blender-pipeline.md`): authoring 3-D assets
+  (the neon "core" + any new mesh) in flatpak Blender 5.1 driven by the `blender` MCP
+  server (bpy over your lane, default `:9876`), for the aurora turntable sprite (EEVEE) and the Layer-10
+  bevy glTF — bpy automation, modeling/scene hygiene, PBR/emission materials, lighting &
+  transparent turntable rendering, and the glTF→bevy 0.18 export contract. Use whenever
+  the user wants to change desktop blur, frosted glass, rounded corners, sharpening
+  (CAS), color grading, the animated/reactive wallpaper, a GPU fluid sim, any GPU
+  UI/shader effect, or to **author/edit a Blender 3-D asset or its render/export** — or
+  wants design/UX guidance on how an effect should look or feel.
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
 ---
 
-# KWin GPU effects
+# GPU effects
 
 Procedures for driving the GPU shader effects in this pack (Layer 9,
 `9-gpu-effects/`). The whole Plasma 6 UI is already GPU-composited (KWin via
 OpenGL/EGL; shell via the QtQuick scene graph) — you are changing *which* shaders
 run in that pipeline, not adding GPU rendering.
 
+> **Making an *aesthetic* decision — add/tune/remove an effect, "make it look more
+> like Big Sur," how much blur/glow/motion is right?** Read `reference/design-ux.md`
+> first. It's the expert design/UI/UX judgment for this pack: Apple's
+> deference/clarity/depth lens, the materials & vibrancy ladder, glassmorphism that
+> stays legible (contrast ≥4.5:1, scrim, blur-more-on-busy-bg), depth/hierarchy,
+> motion timing/easing tables (with the latency ceilings the aurora reactivity must
+> hit), accessibility (reduced-transparency/motion), and a pre-deploy design-review
+> checklist. **The meta-rule: effects serve the content — know when to stop.**
+
 > **Authoring a *material look* (frosted/clear glass, acrylic, brushed metal, …)?**
 > Read `reference/shader-materials.md` first. It explains the one thing that trips
 > people up — a compositor has **no 3-D normals or lights**, so every "material" is a
 > screen-space recipe over the backdrop (blur + tint + noise + edge-Fresnel +
 > refraction) — and gives per-material GLSL plus how each blur-fork knob maps to a
-> material primitive.
+> material primitive. (`design-ux.md` says *how far* to push those knobs; this says
+> *how to build* them.)
+
+> **Authoring a 3-D *hero asset* in Blender (the neon "core", or any new mesh for the
+> aurora sprite / Layer-10 bevy engine)?** Read `reference/blender-pipeline.md` first.
+> The pack drives **flatpak Blender 5.1 via the `blender` MCP server** (Python over the
+> lane socket `localhost:${NIMBUS_BLENDER_PORT:-9876}` — you send `bpy` code, you can't see the
+> viewport; start the lane with `blender-mcp.sh up`), feeding two paths:
+> a **turntable PNG sprite sheet** (EEVEE → wallpaper) and a **glTF/GLB** (→ bevy 0.18).
+> The doc's §0 is the operating reality + live-verified facts about this exact build
+> (e.g. it's **EEVEE-only — no Cycles**, so in-Blender baking is unavailable;
+> `scene.node_tree` is gone; EEVEE "Bloom" is gone → use the Compositor Glare node),
+> then bpy automation, modeling/scene hygiene, materials, lighting/render/turntable, and
+> the glTF→bevy export contract (the 0.18 coordinate gotcha, what survives export, emissive→bloom).
 
 **Always Wayland.** X11 disables compositing for fullscreen apps and breaks these
 effects. Confirm with `echo $XDG_SESSION_TYPE` (must be `wayland`).
@@ -37,7 +70,7 @@ effects are active (stock `blur` vs the forks `forceblur`/`glass`), whether they
 actually *loaded* in the compositor, and flags the only-one-may-run conflict:
 
 ```bash
-bash .claude/skills/kwin-gpu-effects/scripts/effect-state.sh
+bash .claude/skills/gpu-effects/scripts/effect-state.sh
 ```
 
 ### Applying changes live — pick the RIGHT call (this matters)
@@ -196,9 +229,26 @@ root, no `Kirigami.Theme` scheme tracking → poll `kdeglobals`) are in
 `interactive-bg/README.md`.
 
 **Styles** (config `Style` 0–8): 0–7 are single-pass procedural looks in `aurora.frag`
-(Flow/Hills/Silk/Caustics/Ink/Laserwave/Vaporwave/Cyberpunk); **8 "Liquid"** is a real
-**multi-pass GPU fluid** (Eulerian stable-fluids) rendered by `FluidLayer.qml` +
-`fluid_{velocity,pressure,dye,display}.frag`, swapped in via a `Loader` when selected.
+(Flow/Hills/Silk/Caustics/Ink + three raymarched 3-D scenes: **Laserwave** = a neon grid
+on an INTERACTIVE reflective water surface — cursor/music/ambient ripples + a mirrored
+sun; **Vaporwave** = "Elysium", an endless pastel-marble COLONNADE receding to the
+Floral-Shoppe sun with a glossy checkered floor + iridescent focal sphere; **Cyberpunk** =
+"Datascape", a Tron neon DATA-GRID flythrough with headlight/taillight TRAFFIC traces +
+neon-haze atmosphere); **8 "Liquid"** is a real **multi-pass GPU fluid** (Eulerian
+stable-fluids) rendered by `FluidLayer.qml` + `fluid_{velocity,pressure,dye,display}.frag`,
+swapped in via a `Loader` when selected.
+
+**Bloom + hero compositing (main.qml):** the whole aurora scene + a Blender-authored
+**hero sprite** (`contents/assets/hero_core.png`, a 16-frame turntable shown on the neon
+styles 5/7) are wrapped in `sceneRoot`, captured to a `ShaderEffectSource` (`reactBuf`
+pattern), and drawn through a single-pass **bloom** composite (`bloom.frag`: 32-tap
+golden-angle bright-pass glow; lighter in light mode; bypassed on Liquid). The SAME hero
+is exported as glTF (`hero_core.glb`) and rendered live in 3-D (HDR + bevy `Bloom`) by the
+Layer-10 engine. Author/re-render the hero (and any new mesh) via the `blender` MCP server
+(`uvx blender-mcp`; needs Blender open on your lane — start it with
+`.claude/skills/gpu-effects/blender-mcp.sh up`) — the full
+authoring pipeline (bpy automation, modeling, materials, turntable render, glTF→bevy
+export) is in **`reference/blender-pipeline.md`**.
 
 **Multi-pass float feedback in pure QML (the key technique):** `ShaderEffectSource`
 exposes `format: ShaderEffectSource.RGBA16F` (and `RGBA32F`) + `recursive: true` +
@@ -225,16 +275,29 @@ Verify QML *rendering* (not just load) headlessly with `item.grabToImage(...save
 in a tiny `qml -I <dir> harness.qml` — qmllint/`QQmlComponent.create` check construction,
 not whether the feedback actually renders.
 
-### Standalone GPU fluid engine — Layer 10 (`10-shader-engine/`)
+### Standalone GPU engine — Layer 10 (`10-shader-engine/`)
 The max-power *showpiece* track: a standalone **Rust / bevy 0.18 / wgpu** app
-(`nimbus-flux`) running a real compute-shader Eulerian fluid (ink/mercury/water) at the
-display refresh rate — NOT the desktop, a separate window you launch. Build+run with
-`bash 10-shader-engine/run.sh`; install (release build + app-menu launcher) /revert with
-`10-shader-engine/{install,revert}.sh`. Use this when you want compute shaders / particle
-sims that exceed what QtQuick ShaderEffect can do; use the wallpaper "Liquid" style above
-when you want it integrated into the actual desktop. Headless-verify a frame with
-`NIMBUS_FLUX_CAPTURE=1` (saves `/tmp/nimbus-flux-frame.png`, logs FPS). Asset note: a bare
-binary looks for `assets/` next to itself — `run.sh` sets `BEVY_ASSET_ROOT`.
+(`nimbus-flux`). Originally a compute-shader Eulerian fluid (ink/mercury/water), it now
+also hosts **asset-driven 3-D scenes** and can run **as the live desktop wallpaper**.
+Build+run with `bash 10-shader-engine/run.sh`; install (release build + app-menu launcher)
+/revert with `10-shader-engine/{install,revert}.sh`. Env selectors:
+- `NIMBUS_FLUX_SCENE=cyberpunk|hexen` — pick a 3-D scene (else the fluid sim).
+- `NIMBUS_FLUX_WALLPAPER=1` — render onto a wlr-layer-shell **desktop wallpaper** surface
+  (`bevy_live_wallpaper`); covers the Plasma wallpaper + icons, stop with `pkill -x nimbus-flux`.
+  Defaults to the `hexen` scene.
+- `NIMBUS_FLUX_RT=0|1` — bevy_solari **hardware ray tracing** (hexen only; **on by default
+  as a wallpaper**), denoised by **DLSS Ray Reconstruction** when the DLSS SDK is built in.
+- `NIMBUS_FLUX_CAPTURE=1` — headless-verify a frame (`/tmp/nimbus-flux-frame.png` + FPS).
+
+The **hexen** scene is the gothic Hexen/Heretic dungeon wallpaper (Poly Haven CC0 stone +
+props, window-move camera reactivity, RT+DLSS, login autostart) — its own docs +
+DLSS/Solari gotchas (Solari ignores `AmbientLight`; physical radiance needs an indoor
+`Exposure`; NVIDIA+Wayland windowed swapchain-timeout panic) live in
+`10-shader-engine/hexen/README.md`. Use this engine when you want compute/particle sims or
+real-time RT that exceed QtQuick ShaderEffect; use the wallpaper "Liquid" style above for
+the integrated desktop fluid. Asset note: a bare binary looks for `assets/` next to itself —
+`run.sh` sets `BEVY_ASSET_ROOT`. Blender-authored hero mesh export contract (bevy 0.18
+coordinate gotcha, emissive→bloom) is in `reference/blender-pipeline.md`.
 
 ## Troubleshooting
 

@@ -56,6 +56,26 @@ Big Sur GLSL aurora on the QtQuick scene graph (NOT a KWin effect).
   Bridges: `windows-apply.sh` (window reactivity), `audio-apply.sh` (music).
   Lock screen: `lockscreen-apply.sh`. Each has a matching `*-restore.sh`.
 
+## Blender hero assets (`blender` MCP server)
+3-D "hero" meshes (the neon "core", `hero_core.{png,glb}`) are authored in **flatpak
+Blender 5.1 driven by Python over the `blender` MCP server**, feeding
+two paths: a **turntable PNG sprite sheet** (EEVEE → aurora wallpaper) and a **glTF/GLB**
+(→ Layer-10 bevy engine). **Read `.claude/skills/gpu-effects/reference/blender-pipeline.md`
+before authoring/editing any Blender asset.** Operating reality (full detail in that doc):
+you send `bpy` code and **can't see the viewport** — render a PNG/export the GLB and
+read it back to verify (never trust "it ran"). The sandbox **can't write host `/tmp`** —
+output under `$HOME`. This flatpak is **EEVEE-only (no Cycles)**, so in-Blender texture
+baking is unavailable. Prefer the data API over `bpy.ops`; apply transforms before export;
+keep glow path-correct (Compositor Glare for the sprite, emissive→bevy bloom for the glTF).
+
+**Lanes / the forge (authoring-only, never installed):** the MCP server routes to
+`localhost:${NIMBUS_BLENDER_PORT:-9876}`. Start/stop a Blender instance on your lane with
+`.claude/skills/gpu-effects/blender-mcp.sh {up|down|status}` (idempotent up/down — the
+authoring analogue of install/revert, deliberately **not** in `nimbus.layers`). Default
+lane **9876** is canonical; parallel agents take **9877+** (`export NIMBUS_BLENDER_PORT=9877`
+before both the launcher *and* `claude`). Each lane is a separate flatpak instance — only
+ever touch **your own** lane/scene; never assume 9876.
+
 ## Conventions
 - **Reversible by default**: every standing system change goes through an
   install/revert pair. Mirror live tweaks back into the owning layer's script.
@@ -63,7 +83,7 @@ Big Sur GLSL aurora on the QtQuick scene graph (NOT a KWin effect).
 - **Wayland only** — effects/shaders need it.
 - Blur forks (`glass`/`forceblur`/`kwin_effect_shaders`) **ignore
   `/KWin reconfigure`** — drive them via `/Effects` (load/unload/reconfigureEffect).
-  See the `.claude/skills/kwin-gpu-effects` skill.
+  See the `.claude/skills/gpu-effects` skill.
 
 ## Testing — run before any deploy
 ```bash
