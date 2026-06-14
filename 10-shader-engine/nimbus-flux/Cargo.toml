@@ -8,14 +8,26 @@ license = "MIT"
 [dependencies]
 # Pinned to the latest stable bevy. `wayland` makes winit talk Wayland natively
 # (this is a Wayland-only session); the default x11 feature stays as an XWayland
-# fallback. Everything renders through wgpu's Vulkan backend on the RTX 4090.
-bevy = { version = "0.18.1", features = ["wayland"] }
+# fallback. `jpeg` lets the image loader decode the Poly Haven CC0 .jpg PBR maps
+# the "hexen" scene (and its glTF props) ship as. `bevy_solari` is bevy's experimental
+# hardware ray-traced global illumination — compiled in, but only activated at runtime
+# by NIMBUS_FLUX_RT=1 (needs a ray-tracing GPU; the RTX 4090 qualifies). Everything
+# renders through wgpu's Vulkan backend.
+bevy = { version = "0.18.1", features = ["wayland", "jpeg", "bevy_solari"] }
+bevy_live_wallpaper = { version = "0.4.0", features = ["wayland"] }
+# serde derive for the Layer-10 "journey" scene manifests (leg-NNN.json). Already in the
+# tree transitively via bevy, so this resolves from cache with no extra build cost.
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.150"
 
 # Dev iteration: build with `--features fastdev` to hot-link bevy as a shared lib,
 # which slashes incremental rebuild time. Release/installed builds omit it so the
 # binary is self-contained.
 [features]
 fastdev = ["bevy/dynamic_linking"]
+# DLSS Ray Reconstruction denoiser for the Solari RT path (needs the DLSS SDK at build
+# time — see run.sh / hexen/README). Built via `--features dlss`.
+dlss = ["bevy/dlss"]
 
 # A fluid sim wants an optimised solver even in dev — compile our own crate at -O1
 # and bevy's heavy deps at -O3 so the first run isn't a slideshow.

@@ -1,2 +1,6 @@
 # Cargo build artifacts — multi-GB, never commit.
 /target
+
+# Poly Haven CC0 assets for the hexen scene — fetched, not committed
+# (run fetch-hexen-assets.sh to repopulate)
+assets/hexen/

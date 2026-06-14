@@ -57,11 +57,30 @@ launches are instant.
 - **Water** — depth-tinted pools with specular sheen and caustic glints along the
   ripple crests.
 
+## Scenes & wallpaper mode
+
+Beyond the fluid sim, the engine hosts asset-driven 3-D scenes (select with
+`NIMBUS_FLUX_SCENE`) and can render as a live **desktop wallpaper**
+(`NIMBUS_FLUX_WALLPAPER=1`, via `bevy_live_wallpaper` on a wlr-layer-shell surface; stop
+with `pkill -x nimbus-flux` — it can't be changed from System Settings while running):
+
+| `NIMBUS_FLUX_SCENE` | What |
+|---|---|
+| *(unset)* | the GPU fluid sim above (window default) |
+| `cyberpunk` | neon-city flythrough showpiece (`scene_cyberpunk.rs`) |
+| `hexen` | gothic **Hexen/Heretic** dungeon (`scene_hexen.rs`) — Poly Haven CC0 stone + props, window-move camera reactivity, and **ray tracing (`bevy_solari`) + DLSS Ray Reconstruction** by default as a wallpaper. The default scene when `NIMBUS_FLUX_WALLPAPER=1`. **Full details + DLSS/autostart setup: [`hexen/README.md`](hexen/README.md).** |
+
+`NIMBUS_FLUX_RT=0|1` overrides ray tracing (hexen only; on by default as a wallpaper).
+`NIMBUS_FLUX_CAPTURE=1` saves a frame to `/tmp/nimbus-flux-frame.png` and logs FPS.
+
 ## Status / roadmap
 
 - [x] Compute fluid solver, 60+ FPS, cursor-interactive
 - [x] Ink / mercury / water styles, light/dark aware
 - [x] Install/revert + app-menu launcher; wired into the top-level installer
+- [x] Asset-driven 3-D scenes (cyberpunk city, hexen gothic dungeon)
+- [x] Live desktop-wallpaper mode (`bevy_live_wallpaper`) + login autostart
+- [x] Hardware ray tracing (`bevy_solari`) + DLSS Ray Reconstruction denoising (hexen)
 - [ ] Shader-driven interactive UI overlay (controls as GPU surfaces)
 - [ ] Self-contained binary (embed the shader to drop the BEVY_ASSET_ROOT step)
 

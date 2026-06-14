@@ -14,5 +14,5 @@
 7    | 7-notifications      | yes  | install.sh -y              | revert.sh | Apple-style swaync toasts + center, scheme-synced
 8    | 8-dolphin-quicklook  | no   | install.sh                 | revert.sh | Space previews the selection via kiview (Quick Look)
 9    | 9-gpu-effects        | no   | install.sh -y              | revert.sh | Glass blur fork + GLSL shaders + interactive aurora wallpaper
-10   | 10-shader-engine     | no   | install.sh                 | revert.sh | Standalone bevy/wgpu GPU fluid engine (Nimbus Flux)
+10   | 10-shader-engine     | no   | install.sh                 | revert.sh | Standalone bevy/wgpu engine (Nimbus Flux) — GPU fluid sim + 3-D scenes + ray-traced (Solari/DLSS) Hexen dungeon wallpaper
 11   | 11-app-unify         | no   | install.sh -y              | revert.sh | Cross-app uniformity — browsers, Electron, Flatpak share the WhiteSur frame/theme

@@ -146,7 +146,14 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
 
     commands.insert_resource(FluidConfig::new());
 
-    commands.spawn((Camera2d, Tonemapping::None));
+    let cam2d = commands.spawn((Camera2d, Tonemapping::None)).id();
+    // In wallpaper mode, mark the fluid camera so bevy_live_wallpaper retargets it onto
+    // the layer-shell surface (the hero Camera3d composites over it at order 1).
+    if std::env::var("NIMBUS_FLUX_WALLPAPER").is_ok() {
+        commands
+            .entity(cam2d)
+            .insert(bevy_live_wallpaper::LiveWallpaperCamera);
+    }
     commands.spawn((
         Sprite {
             image: out,
