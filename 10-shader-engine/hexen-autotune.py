@@ -120,8 +120,12 @@ def main() -> int:
     ap.add_argument("--cam", default="")
     ap.add_argument("--timeout", type=int, default=300)
     ap.add_argument("--knobs", default="",
-                    help="comma-separated subset the proposer may pick (e.g. only knobs that "
-                         "transfer to the RT wallpaper); default = all")
+                    help="comma-separated subset the proposer may pick; overrides the "
+                         "path-based default selection below")
+    ap.add_argument("--rt", action="store_true",
+                    help="tune + JUDGE the RT (Solari) path the LIVE wallpaper actually runs "
+                         "(captures with --rt, re-establishes an RT baseline, and restricts "
+                         "knobs to RT-relevant ones). Default: the raster preview path.")
     ap.add_argument("--dry-propose", action="store_true",
                     help="only print proposals; don't set/capture/judge/accept")
     args = ap.parse_args()
@@ -140,6 +144,25 @@ def main() -> int:
             return 2
         knobs = {k: knobs[k] for k in want}
         print(f"proposer restricted to: {', '.join(knobs)}")
+    else:
+        # Only propose knobs that move the path we're judging — a knob that's a no-op on the
+        # judged path is noise the judge can't attribute. RT tunes both-path + rt-only;
+        # raster tunes both-path + raster-only.
+        want_paths = {"both", "rt"} if args.rt else {"both", "raster"}
+        knobs = {k: v for k, v in knobs.items() if v.get("path", "both") in want_paths}
+        print(f"{'RT (Solari)' if args.rt else 'raster'} mode: tuning {', '.join(knobs)}")
+
+    if args.rt and not args.dry_propose:
+        # The judge compares baseline.png vs the new frame; both MUST be the SAME render path,
+        # else it's grading RT-vs-raster. Re-establish baseline.png as an RT capture first.
+        print("RT mode: re-establishing baseline.png as an RT capture (apples-to-apples) …")
+        rc, _ = run([str(TUNE), "capture", "--rt", "--label", "rt-baseline"])
+        rtb = STATE / "captures" / "rt-baseline.png"
+        if rc != 0 or not rtb.exists():
+            print("  error: RT baseline capture failed — aborting (won't judge RT vs raster).",
+                  file=sys.stderr)
+            return 1
+        run([str(TUNE), "accept", "--capture", str(rtb), "-m", "RT baseline (autotune --rt)"])
     history = []
 
     for i in range(1, args.iterations + 1):
@@ -175,6 +198,8 @@ def main() -> int:
         run([str(TUNE), "set", f"{knob}={val}", "-m", goal])
         label = f"auto-{i}-{knob}"
         cap_cmd = [str(TUNE), "capture", "--label", label]
+        if args.rt:
+            cap_cmd.append("--rt")
         if args.cam:
             cap_cmd += ["--cam", args.cam]
         rc, _ = run(cap_cmd)

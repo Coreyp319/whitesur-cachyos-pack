@@ -64,17 +64,22 @@ CRATE = Path(__file__).resolve().parent / "nimbus-flux"
 # knob. (Handoff's recommended park; override with --cam, or --cam dolly to let it glide.)
 DEFAULT_CAM = "0,2.2,23,0,0.4,9"
 
-# Knob -> (lo, hi, default). Ranges MIRROR scene_hexen.rs::HexenTuning::load. Widen this
-# table (and the Rust struct) together when graduating past the spike.
+# Knob -> (lo, hi, default, path). Ranges MIRROR scene_hexen.rs::HexenTuning::load. `path`
+# is the render path the knob affects — "both" (materials/fog apply unconditionally),
+# "raster" (raster-only; a NO-OP in the RT wallpaper), or "rt" (the Solari/RT path the live
+# wallpaper actually runs). The autotuner uses `path` to only propose knobs that move the
+# path it's judging. Widen this table (and the Rust struct) together past the spike.
 KNOBS = {
-    "wall_roughness":    (0.5, 0.95, 0.7),     # hero brick gloss; lower = wetter, reveals relief
-    "wall_depth":        (0.0, 0.06, 0.045),   # hero brick parallax; >0.06 smears the stretched UV
-    "moonlight":         (400.0, 1400.0, 850.0),  # cool key illuminance (raster); warm/cool = depth
-    "floor_roughness":   (0.35, 0.7, 0.45),    # floor gloss; lower = wetter flagstone glint
-    "floor_depth":       (0.0, 0.05, 0.03),    # floor parallax relief
-    "ambient":           (25.0, 80.0, 42.0),   # AmbientLight fill (raster); lower = deeper shadows
-    "fog_density":       (0.004, 0.012, 0.007),  # DistanceFog far-fade vs. detail wash
-    "fogvolume_density": (0.015, 0.05, 0.028),   # god-ray haze vs. curtaining
+    "wall_roughness":    (0.5, 0.95, 0.7, "both"),      # hero brick gloss; lower = wetter, reveals relief
+    "wall_depth":        (0.0, 0.06, 0.045, "both"),    # hero brick parallax; >0.06 smears the stretched UV
+    "floor_roughness":   (0.35, 0.7, 0.45, "both"),     # floor gloss; lower = wetter flagstone glint
+    "floor_depth":       (0.0, 0.05, 0.03, "both"),     # floor parallax relief
+    "fog_density":       (0.004, 0.012, 0.007, "both"),   # DistanceFog far-fade vs. detail wash
+    "fogvolume_density": (0.015, 0.05, 0.028, "both"),    # god-ray haze vs. curtaining
+    "moonlight":         (400.0, 1400.0, 850.0, "raster"),  # cool key illuminance — RASTER path only
+    "ambient":           (25.0, 80.0, 42.0, "raster"),   # AmbientLight fill — RASTER only (Solari ignores it)
+    "rt_exposure":       (5.0, 8.5, 6.5, "rt"),          # Solari camera Exposure ev100 (LOWER = brighter) — RT
+    "rt_moonlight":      (3000.0, 12000.0, 7000.0, "rt"),   # cool key illuminance in RT (Solari lights from real lights)
 }
 
 
@@ -87,11 +92,11 @@ def stamp() -> str:
 
 
 def defaults() -> dict:
-    return {k: d for k, (_lo, _hi, d) in KNOBS.items()}
+    return {k: d for k, (_lo, _hi, d, _p) in KNOBS.items()}
 
 
 def clamp(name: str, value: float) -> float:
-    lo, hi, _ = KNOBS[name]
+    lo, hi, _, _ = KNOBS[name]
     return max(lo, min(hi, value))
 
 
@@ -175,7 +180,7 @@ def cmd_set(args) -> int:
             return 2
         clamped = clamp(name, val)
         if clamped != val:
-            lo, hi, _ = KNOBS[name]
+            lo, hi, _, _ = KNOBS[name]
             print(f"note: {name} {val} clamped to {clamped} (range {lo}..{hi})")
         cur[name] = clamped
         changed.append(f"{name}={clamped}")
@@ -330,17 +335,17 @@ def cmd_golive(args) -> int:
     save_json(LIVE, lg)
     print(f"promoted to live: {fmt(lg)}")
     print(f"  wrote {LIVE}")
-    print("  takes effect on the NEXT wallpaper (re)start. NOTE: the wallpaper runs RT, so "
-          "only path-shared knobs (materials/parallax/fog) show; raster-only lighting "
-          "(moonlight, ambient) does not affect the RT path.")
+    print("  takes effect on the NEXT wallpaper (re)start. NOTE: the wallpaper runs RT — "
+          "materials/parallax/fog AND the RT lighting knobs (rt_exposure, rt_moonlight) show; "
+          "the raster-only knobs (moonlight, ambient) do NOT affect the RT path.")
     return 0
 
 
 def cmd_knobs(args) -> int:
     """Emit the knob surface as JSON — the single source the autotuner reads for ranges
     + validation (so the table isn't re-declared in the driver)."""
-    print(json.dumps({k: {"lo": lo, "hi": hi, "default": d}
-                      for k, (lo, hi, d) in KNOBS.items()}, indent=2))
+    print(json.dumps({k: {"lo": lo, "hi": hi, "default": d, "path": p}
+                      for k, (lo, hi, d, p) in KNOBS.items()}, indent=2))
     return 0
 
 

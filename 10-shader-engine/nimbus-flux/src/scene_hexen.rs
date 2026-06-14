@@ -107,6 +107,14 @@ struct HexenTuning {
     fog_density: f32,
     /// `FogVolume.density_factor` — god-ray haze vs. curtaining.
     fogvolume_density: f32,
+    /// (RT path) Solari camera `Exposure.ev100` — the master RT brightness dial (LOWER =
+    /// brighter; Solari outputs physical radiance). Was hardcoded 6.5; now tunable so the
+    /// autotune loop, judging the RT capture, can actually move the live wallpaper's look.
+    rt_exposure: f32,
+    /// (RT path) cool moonlight key `illuminance` in RT. Solari lights surfaces from real
+    /// lights only (it ignores flat AmbientLight), so this carries the global cool fill in
+    /// RT. Was hardcoded 7000.0.
+    rt_moonlight: f32,
 }
 
 impl Default for HexenTuning {
@@ -121,6 +129,8 @@ impl Default for HexenTuning {
             ambient: 42.0,
             fog_density: 0.007,
             fogvolume_density: 0.028,
+            rt_exposure: 6.5,
+            rt_moonlight: 7000.0,
         }
     }
 }
@@ -150,11 +160,14 @@ impl HexenTuning {
         t.ambient = num("ambient", t.ambient).clamp(25.0, 80.0);
         t.fog_density = num("fog_density", t.fog_density).clamp(0.004, 0.012);
         t.fogvolume_density = num("fogvolume_density", t.fogvolume_density).clamp(0.015, 0.05);
+        t.rt_exposure = num("rt_exposure", t.rt_exposure).clamp(5.0, 8.5);
+        t.rt_moonlight = num("rt_moonlight", t.rt_moonlight).clamp(3000.0, 12000.0);
         info!(
             "hexen tuning loaded from '{path}': wall_roughness={} wall_depth={} moonlight={} \
-             floor_roughness={} floor_depth={} ambient={} fog_density={} fogvolume_density={}",
+             floor_roughness={} floor_depth={} ambient={} fog_density={} fogvolume_density={} \
+             rt_exposure={} rt_moonlight={}",
             t.wall_roughness, t.wall_depth, t.moonlight, t.floor_roughness, t.floor_depth,
-            t.ambient, t.fog_density, t.fogvolume_density
+            t.ambient, t.fog_density, t.fogvolume_density, t.rt_exposure, t.rt_moonlight
         );
         t
     }
@@ -213,8 +226,9 @@ fn setup(
             SolariLighting::default(),
             CameraMainTextureUsages::default().with(TextureUsages::STORAGE_BINDING),
             // Solari outputs physical radiance; the default daylight exposure
-            // (ev100 9.7) under-exposes this torch-lit interior. Brighten it.
-            Exposure { ev100: 6.5 },
+            // (ev100 9.7) under-exposes this torch-lit interior. Brighten it. Tunable
+            // (rt_exposure) so the autotune loop can dial the live wallpaper's exposure.
+            Exposure { ev100: tuning.rt_exposure },
         ));
     } else if std::env::var("NIMBUS_FLUX_WALLPAPER").is_err() {
         // SSAO builds a depth-mip pyramid sized to the view; under the
@@ -242,7 +256,7 @@ fn setup(
         DirectionalLight {
             // Solari lights surfaces from real lights only (it ignores flat AmbientLight),
             // so the moonlight key carries the global fill in RT; raster leans on ambient.
-            illuminance: if rt { 7000.0 } else { tuning.moonlight }, // cool key vs. warm torches —
+            illuminance: if rt { tuning.rt_moonlight } else { tuning.moonlight }, // cool key vs. warm torches —
             // the complementary contrast is what reads as depth, not a single orange wash
             color: Color::srgb(0.55, 0.65, 0.95),
             shadows_enabled: true,
