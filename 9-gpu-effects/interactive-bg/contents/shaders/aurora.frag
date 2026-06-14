@@ -26,7 +26,7 @@ layout(std140, binding = 0) uniform buf {
     float uDark;            // 1 = dark variant, 0 = light (follows the colour scheme)
     float uIntensity;       // colour vividness; 1 = as-designed, <1 muted, >1 punchy
     int   uTheme;           // 0 Big Sur·1 Monterey·2 Graphite·3 Sunset·4 Nord·5 Laserwave·6 Vaporwave·7 Cyberpunk·8 Outrun·9 Custom
-    int   uStyle;           // base look: 0 Flow·1 Hills·2 Silk curtains·3 Caustics·4 Ink in water·5 Laserwave·6 Vaporwave·7 Cyberpunk
+    int   uStyle;           // base look: 0 Flow·1 Hills·2 Silk curtains·3 Caustics·4 Ink in water·5 Laserwave·6 Vaporwave (marble colonnade)·7 Cyberpunk (neon datascape)
     // custom palette (used when uTheme == 5); .rgb of each, low → high stop
     vec4  uColor0;
     vec4  uColor1;
@@ -56,6 +56,10 @@ layout(std140, binding = 0) uniform buf {
     float uTreble;          // 0..1 high-band energy
     float uLevel;           // 0..1 overall loudness
     float uBeat;            // 0..1 transient pulse, decays fast (a ripple trigger)
+    // --- surface yaw (window-drag banks the ground plane, eased + spring-back in QML)
+    float uYaw;             // radians; rotates the Laserwave grid's ground plane
+    float uPitch;           // -1..1 car pitch (cursor-Y); deepens the Laserwave hills when cresting
+    float uHill;            // 0..1 Laserwave rolling-hill strength (0 = flat grid)
 };
 
 // Persistent reactive feedback field (react.frag): r excitation (cursor trails,
@@ -281,142 +285,347 @@ vec2 windowFlow(vec2 p, vec2 baseV, float t) {
     return V;
 }
 
-// ============ Cyberpunk: raymarched foggy neon city ==========================
-// Real 3D, not 2D cut-outs. A grid of towers recedes into GENUINE distance-fog over a
-// wet reflective street, lit only by emissive neon windows. True perspective + fog give
-// the cinematic depth a flat skyline can't fake. The camera drifts slowly forward. y is
-// up, ground at y=0; colour comes only from the palette (c0/c1 night+haze, c2..c4 neon).
+// ===================== shared 3-D scene helpers ==============================
+// Both neon styles below (Cyberpunk "Datascape" and Vaporwave "Elysium") are
+// REAL raymarched 3-D scenes — genuine perspective + reflections give depth a
+// 2-D cut-out can't fake. y is up, ground at y=0. Colour comes ONLY from the
+// palette c0..c4 (white is used as a neutral value-lift for marble, like the
+// light-mode grade does), so both keep every theme/scheme/custom for free.
 float sdBox3(vec3 p, vec3 b) {
     vec3 d = abs(p) - b;
     return length(max(d, 0.0)) + min(max(d.x, max(d.y, d.z)), 0.0);
 }
-// distance to ground + a grid of towers (streets between). Heights skewed so a few
-// towers loom tall over many short blocks.
-float mapCity(vec3 p) {
-    float d = p.y;                                   // ground plane
-    const float G = 3.0;
-    vec2  id = floor(p.xz / G);
-    vec3  q  = p; q.xz = mod(p.xz + 0.5 * G, G) - 0.5 * G;
-    float rnd = hash(id);
-    float h   = 1.0 + 9.5 * rnd * rnd;               // most short, a few tall
-    float w   = 0.60 + 0.55 * hash(id + 3.1);        // footprint half-width
-    float box = sdBox3(vec3(q.x, p.y - h * 0.5, q.z), vec3(w, h * 0.5, w));
-    return min(d, box);
+float sdBox2(vec2 p, vec2 b) {              // box infinite along the missing axis
+    vec2 d = abs(p) - b;
+    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
 }
-vec3 cityNormal(vec3 p) {
-    vec2 e = vec2(0.012, 0.0);
-    return normalize(vec3(mapCity(p + e.xyy) - mapCity(p - e.xyy),
-                          mapCity(p + e.yxy) - mapCity(p - e.yxy),
-                          mapCity(p + e.yyx) - mapCity(p - e.yyx)));
+float sdSphere(vec3 p, float r) { return length(p) - r; }
+// vertical capped cylinder: axis +y, radius r, half-height h, centred at origin
+float sdCylinderY(vec3 p, float r, float h) {
+    vec2 d = abs(vec2(length(p.xz), p.y)) - vec2(r, h);
+    return min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
 }
-// emissive neon at a building point: a window grid on the lit face, SELECTIVELY lit so
-// the city reads as pools of light in the dark. Skips roofs/ground (n.y up).
-vec3 cityEmission(vec3 p, vec3 n, vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4) {
-    if (n.y > 0.5) return vec3(0.0);
-    const float G = 3.0;
-    vec2  id = floor(p.xz / G);
-    vec3  q  = p; q.xz = mod(p.xz + 0.5 * G, G) - 0.5 * G;
-    float u  = (abs(n.x) > abs(n.z)) ? q.z : q.x;    // horizontal coord along the lit face
-    float gu = abs(fract(u   / 0.16) - 0.5);
-    float gv = abs(fract(p.y / 0.20) - 0.5);
-    float pane = smoothstep(0.40, 0.20, gu) * smoothstep(0.42, 0.22, gv);   // window panes
-    float lit  = step(0.48, hash(vec2(floor(u / 0.16), floor(p.y / 0.20)) + id * 7.0));
-    float towerLit = mix(0.05, 1.0, step(0.42, hash(id + 11.0)));           // pools of light
-    vec3  nc = ramp(0.42 + 0.50 * hash(id + 5.0), c0, c1, c2, c3, c4);
-    return nc * pane * lit * towerLit;
+
+// ============ Cyberpunk: "Datascape" — a Tron-style neon data grid ===========
+// A CLEAN, emissive (not foggy) flythrough over a glowing grid floor: light
+// pulses race along the lines like data on a circuit board, edge-lit data-blocks
+// rise off the grid, and a neon horizon glows in the distance. Digital, not
+// photoreal — the cheaper, more abstract reading. Camera drifts forward.
+#define DG_CELL 2.0
+void dgCell(vec2 id, out float h, out float w) {
+    float occupied = step(0.40, hash(id * 0.91 + 4.7));   // ~60% of cells hold a block
+    float r        = hash(id * 1.7 + 0.3);
+    h = occupied * (0.45 + 3.4 * r * r);                  // mostly low, a few tall
+    w = 0.34 + 0.32 * hash(id + 2.0);                     // footprint < CELL/2 (no overlap)
 }
-vec3 skyDome(vec3 rd, vec3 c0, vec3 c2, vec3 c3, vec3 c4, vec3 fogCol) {
-    float up = clamp(rd.y, 0.0, 1.0);
-    vec3  col = mix(fogCol, c0 * 0.35, pow(up, 0.45));      // hazy horizon -> deep top
-    vec3  md  = normalize(vec3(0.32, 0.22, 1.0));          // moon direction
-    float dm  = max(dot(rd, md), 0.0);
-    col += mix(c3, c4, 0.40) * (pow(dm, 350.0) * 0.9 + pow(dm, 6.0) * 0.18);  // disc + halo
+float mapData(vec3 p) {
+    float d  = p.y;                                       // grid floor
+    vec2  id = floor(p.xz / DG_CELL);
+    vec3  q  = p; q.xz = mod(p.xz + 0.5 * DG_CELL, DG_CELL) - 0.5 * DG_CELL;
+    float h, w; dgCell(id, h, w);
+    if (h > 0.001)
+        d = min(d, sdBox3(vec3(q.x, p.y - h * 0.5, q.z), vec3(w, h * 0.5, w)));
+    return d;
+}
+vec3 dataNormal(vec3 p) {
+    vec2 e = vec2(0.015, 0.0);
+    return normalize(vec3(mapData(p + e.xyy) - mapData(p - e.xyy),
+                          mapData(p + e.yxy) - mapData(p - e.yxy),
+                          mapData(p + e.yyx) - mapData(p - e.yyx)));
+}
+// neon edge-glow on a data-block: bright where two faces meet (all 12 edges) so
+// the block reads as a wireframe-lit solid, not a painted box.
+vec3 dataEdge(vec3 p, vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4) {
+    vec2  id = floor(p.xz / DG_CELL);
+    vec3  q  = p; q.xz = mod(p.xz + 0.5 * DG_CELL, DG_CELL) - 0.5 * DG_CELL;
+    float h, w; dgCell(id, h, w);
+    if (h <= 0.001) return vec3(0.0);
+    vec3  lp = vec3(q.x, p.y - h * 0.5, q.z);
+    vec3  e  = vec3(w, h * 0.5, w) - abs(lp);             // ~0 on a face
+    float m1 = min(e.x, min(e.y, e.z));
+    float m3 = max(e.x, max(e.y, e.z));
+    float m2 = e.x + e.y + e.z - m1 - m3;                 // 2nd-smallest -> ~0 ON AN EDGE
+    float edge = smoothstep(0.07, 0.0, m2) + 0.18 * smoothstep(0.22, 0.0, m2);
+    vec3  nc   = ramp(0.42 + 0.5 * hash(id + 5.0), c0, c1, c2, c3, c4);
+    return nc * edge;
+}
+// emissive grid floor: glowing lines + data packets streaming along them, a
+// beat ripple expanding from under the camera, and a cursor that lights traces.
+vec3 dataFloor(vec3 pos, float t, vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4,
+               vec2 curFloor, float curGate, float camZ, float mMid, float mBeat) {
+    vec2  g  = pos.xz;
+    vec2  fr = abs(fract(g) - 0.5);                       // 0 at a line, 0.5 at cell centre
+    // fwidth-scaled edge -> lines anti-alias (stay ~1px) into the distance instead of
+    // shimmering, while staying crisp up close. Kills the worst "low-res" jaggies.
+    vec2  lwd = 0.02 + 1.4 * fwidth(g);
+    float lx = smoothstep(lwd.x, 0.0, 0.5 - fr.x);
+    float lz = smoothstep(lwd.y, 0.0, 0.5 - fr.y);
+    float lines = max(lx, lz);
+    // a finer secondary grid (circuit traces) for surface detail
+    vec2  fr2  = abs(fract(g * 4.0) - 0.5);
+    vec2  lwd2 = 0.05 + 1.4 * fwidth(g * 4.0);
+    float fine = max(smoothstep(lwd2.x, 0.0, 0.5 - fr2.x), smoothstep(lwd2.y, 0.0, 0.5 - fr2.y));
+    vec3  lineCol = mix(c2, c3, 0.5);
+    vec3  packCol = mix(c3, c4, 0.5);
+    vec3  col = c0 * 0.04;                                // near-black substrate
+    col += lineCol * lines * (0.55 + 0.45 * mMid);
+    col += lineCol * fine * 0.10;                         // fine circuit detail
+    // data packets streaming along the lines (z fast, x slower the other way)
+    float pkZ = smoothstep(0.86, 1.0, fract(g.y * 0.22 - t * 0.55 + hash(vec2(floor(g.x), 1.0))));
+    float pkX = smoothstep(0.92, 1.0, fract(g.x * 0.22 + t * 0.30 + hash(vec2(floor(g.y), 7.0))));
+    col += packCol * (pkZ * lx + pkX * lz) * 1.5;
+    // a beat sends a bright ripple expanding across the grid from under the viewer
+    float ringR = fract(t * 0.6) * 30.0;
+    float ring  = exp(-abs(length(g - vec2(0.0, camZ)) - ringR) * 1.1);
+    col += packCol * ring * lines * mBeat * 2.5;
+    // the cursor lights the traces around its floor projection (style-native)
+    col += lineCol * exp(-length(g - curFloor) * 0.8) * curGate * (0.35 + lines) * 1.4;
+    // --- TRAFFIC: light traces racing along the grid "roads" (the avenues) ---
+    // headlights (warm-white) run +z, taillights (cool) run -z on the z-roads, with
+    // cross-traffic on the x-roads. A short exp tail behind each makes them streak.
+    vec3  headC = mix(c4, vec3(1.0), 0.5);
+    vec3  tailC = mix(c3, c2, 0.25);
+    float laneZ = floor(g.x + 0.5);                       // nearest z-running road
+    float hz1   = hash(vec2(laneZ, 3.0));
+    float carZf = exp(-fract(g.y * 0.45 - t * (1.1 + 0.9 * hz1) + hz1 * 7.0) * 9.0)
+                * step(0.45, hash(vec2(laneZ, 5.0)));      // headlights +z
+    float hz2   = hash(vec2(laneZ, 9.0));
+    float carZb = exp(-fract(-g.y * 0.40 - t * (0.9 + 0.8 * hz2) + hz2 * 3.0) * 9.0)
+                * step(0.55, hash(vec2(laneZ, 2.0)));      // taillights -z
+    col += (headC * carZf + tailC * carZb) * lx * 1.9;
+    float laneX = floor(g.y + 0.5);                       // cross traffic on the x-roads
+    float hx1   = hash(vec2(laneX, 6.0));
+    float carX  = exp(-fract(g.x * 0.42 - t * (1.0 + 0.8 * hx1) + hx1 * 5.0) * 9.0)
+                * step(0.60, hash(vec2(laneX, 8.0)));
+    col += mix(headC, tailC, 0.5) * carX * lz * 1.6;
     return col;
 }
-vec3 cyberpunkScene(vec2 pp, float t, vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4, out float bright) {
-    vec3 fogCol = mix(c1, c2, 0.42);
-    // camera: elevated, looking out across the rooftops to a foggy horizon (a skyline,
-    //         not a canyon), drifting slowly forward
-    vec3 ro = vec3(0.0, 9.0, t * 1.1);
-    vec3 ta = ro + vec3(0.0, -1.0, 8.0);
+vec3 dataSky(vec3 rd, vec3 c0, vec3 c1, vec3 c2, vec3 c3) {
+    float up  = clamp(rd.y, 0.0, 1.0);
+    vec3  col = mix(mix(c1, c2, 0.35), c0 * 0.12, pow(up, 0.5));   // neon horizon -> deep top
+    col += mix(c2, c3, 0.5) * exp(-max(rd.y, 0.0) * 7.0) * 0.55;   // horizon glow band
+    return col;
+}
+vec3 datascapeScene(vec2 pp, vec2 mp, float curGate, float t,
+                    vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4, vec4 mus, out float bright) {
+    float mBass = mus.x, mMid = mus.y, mBeat = mus.w;
+    // fly ABOVE the blocks (tallest ~3.9) looking down — a flythrough over a
+    // circuit board; a lower camera flies INTO the tall blocks and clips them.
+    vec3 ro = vec3(0.0, 6.5 + 0.4 * mBass, t * 2.4);
+    vec3 ta = ro + vec3(0.0, -3.2, 5.0);
     vec3 fw = normalize(ta - ro);
     vec3 rt = normalize(cross(vec3(0.0, 1.0, 0.0), fw));
     vec3 uo = cross(fw, rt);
-    vec3 rd = normalize(fw * 1.7 + rt * pp.x * 1.7 - uo * pp.y * 1.7);  // pp.y is screen-down
+    vec3 rd = normalize(fw * 1.7 + rt * pp.x * 1.7 - uo * pp.y * 1.7);
+    // project the cursor onto the grid floor (so it can light traces there)
+    vec3  crd = normalize(fw * 1.7 + rt * mp.x * 1.7 - uo * mp.y * 1.7);
+    float ct  = (crd.y < -0.01) ? -ro.y / crd.y : -1.0;
+    vec2  curFloor = (ct > 0.0) ? (ro + crd * ct).xz : vec2(1e4);
 
-    // ---- primary march ----
     float dist = 0.0; int hit = 0; vec3 pos = ro;
-    for (int i = 0; i < 80; i++) {
+    for (int i = 0; i < 90; i++) {
         pos = ro + rd * dist;
-        float dd = mapCity(pos);
-        if (dd < 0.0025 * dist + 0.0012) { hit = 1; break; }
-        dist += dd * 0.85;                                  // understep: repetition safety
-        if (dist > 62.0) break;                             // fog saturates here — no point marching further
+        float dd = mapData(pos);
+        if (dd < 0.0022 * dist + 0.001) { hit = 1; break; }
+        dist += dd * 0.9;
+        if (dist > 70.0) break;
     }
-
     vec3 col;
     if (hit == 1) {
-        vec3 n = cityNormal(pos);
-        if (n.y > 0.6 && pos.y < 0.15) {
-            // ---- wet street: reflect (with a wobbling ripple normal), march again ----
-            vec3 gn = normalize(vec3(0.07 * (fbm(pos.xz * 2.0 + t * 0.5) - 0.5),
-                                     1.0,
-                                     0.07 * (fbm(pos.xz * 2.0 + 5.0) - 0.5)));
-            vec3 rr = reflect(rd, gn);
-            vec3 rp = pos + gn * 0.02;
+        vec3 n = dataNormal(pos);
+        if (n.y > 0.6 && pos.y < 0.12) {
+            col = dataFloor(pos, t, c0, c1, c2, c3, c4, curFloor, curGate, ro.z, mMid, mBeat);
+            // glossy reflection of the blocks off the grid floor (Tron sheen)
+            vec3 rr = reflect(rd, vec3(0.0, 1.0, 0.0));
+            vec3 rp = pos + vec3(0.0, 0.01, 0.0);
             float rdist = 0.0; int rhit = 0; vec3 rpos = rp;
-            for (int j = 0; j < 40; j++) {
+            for (int j = 0; j < 34; j++) {
                 rpos = rp + rr * rdist;
-                float dd = mapCity(rpos);
+                float dd = mapData(rpos);
                 if (dd < 0.004 * rdist + 0.002) { rhit = 1; break; }
-                rdist += dd * 0.85;
-                if (rdist > 40.0) break;
+                rdist += dd * 0.9;
+                if (rdist > 34.0) break;
             }
-            vec3 rcol = (rhit == 1)
-                ? c0 * 0.10 + cityEmission(rpos, cityNormal(rpos), c0, c1, c2, c3, c4) * 1.4
-                : skyDome(rr, c0, c2, c3, c4, fogCol);
-            rcol = mix(rcol, fogCol, 1.0 - exp(-rdist * 0.06));
-            col  = mix(c0 * 0.16, rcol, 0.60);                  // dark wet asphalt + reflection
+            if (rhit == 1)
+                col += dataEdge(rpos, c0, c1, c2, c3, c4) * 0.45;     // dim mirrored neon
         } else {
-            col = c0 * 0.09 + cityEmission(pos, n, c0, c1, c2, c3, c4) * 1.5;  // dark body + neon
+            vec3 em = dataEdge(pos, c0, c1, c2, c3, c4);
+            col  = c0 * 0.05 + em * (1.5 + 1.2 * mBass);              // bass lifts the blocks
+            col += em * mBeat * 1.2;                                  // beat flares them
+            // faint "data readout" flecks on the dark faces — surface detail, not flat black
+            vec2  fc  = (abs(n.x) > abs(n.z)) ? vec2(pos.z, pos.y) : vec2(pos.x, pos.y);
+            vec2  fcc = floor(fc * 7.0);
+            float fl  = step(0.84, hash(fcc)) * (0.4 + 0.6 * sin(t * 3.0 + hash(fcc) * 31.0));
+            col += mix(c2, c3, 0.5) * max(fl, 0.0) * 0.16;
         }
-        col = mix(col, fogCol, 1.0 - exp(-dist * 0.052));       // distance fog (thick — dissolve the horizon)
+        col = mix(col, mix(c2, c3, 0.5) * 0.4, 1.0 - exp(-dist * 0.018));  // clean digital depth fade
     } else {
-        col = skyDome(rd, c0, c2, c3, c4, fogCol);
+        col = dataSky(rd, c0, c1, c2, c3);
     }
-
-    bright = clamp(dot(col, vec3(0.35)), 0.0, 1.0);
-    // low-key filmic grade: soft rolloff so neon blooms, S-curve to deepen the blacks
-    col = col / (1.0 + col * 0.5);
-    col = mix(col, col * col * (3.0 - 2.0 * col), 0.30);
+    // --- ATMOSPHERE: neon glow haze (light pollution) thickening with distance,
+    //     plus faint light motes drifting in the air, so the grid breathes air ---
+    col += mix(c2, c3, 0.5) * (1.0 - exp(-dist * 0.02)) * 0.10;     // far neon haze
+    vec2  mq   = pp * 7.0 + vec2(t * 0.25, -t * 0.6);              // drifting motes
+    vec2  mc   = floor(mq);
+    float mh   = hash(mc);
+    float mote = step(0.93, mh) * smoothstep(0.5, 0.0, length(fract(mq) - 0.5))
+               * (0.5 + 0.5 * sin(t * 3.0 + mh * 40.0));
+    col += mix(c3, c4, 0.5) * mote * 0.22;
+    bright = clamp(dot(col, vec3(0.4)), 0.0, 1.0);
+    col = col / (1.0 + col * 0.45);                       // soft rolloff -> neon bloom
     return col;
 }
 
-// palm-tree silhouette (Vaporwave): a leaning trunk + a fountain of ~6 fronds that
-// arc up-and-out from the crown and droop at the tips. Returns a 0..1 coverage mask;
-// the style paints it as a dark cut-out. y is down, so "up" is the -y direction.
-float palmAt(vec2 p, float px, float baseY, float ht) {
-    vec2  cc    = vec2(px, baseY - ht);              // crown centre, up from the horizon
-    float lean  = 0.05 * (baseY - p.y);              // trunk leans in a little as it rises
-    float trunk = smoothstep(0.011, 0.0, abs(p.x - (px + lean)))
-                * step(p.y, baseY) * step(cc.y, p.y);
-    vec2  c = p - cc;                                // crown-local
-    float fronds = 0.0;
-    for (int f = 0; f < 6; f++) {
-        float a = mix(-2.70, -0.45, float(f) / 5.0); // span the upper arc, left → right
-        vec2  dir = vec2(cos(a), sin(a));            // sin(a)<0 ⇒ heads upward
-        for (int s = 1; s <= 5; s++) {
-            float u   = float(s) / 5.0;
-            vec2  pos = dir * (u * 0.16);
-            pos.y += 0.10 * u * u;                   // tips droop back down
-            float w   = 0.012 * (1.0 - 0.6 * u);     // fronds taper to a point
-            fronds = max(fronds, smoothstep(w, 0.0, length(c - pos)));
-        }
+// ============ Vaporwave: "Elysium" — an endless pastel-marble colonnade =======
+// Two rows of fluted classical columns under a continuous architrave recede
+// toward the slitted "Floral Shoppe" sun, over a glossy checkered-marble floor
+// that MIRRORS the pastel sky. A focal sphere drifts in the aisle. Dreamy,
+// deeply 3-D, unmistakably vaporwave. Palette only (+ white as a marble lift).
+#define CO_PZ 3.0      // column spacing in z
+#define CO_X  2.1      // half-width of the aisle (column-row offset in x)
+#define CO_H  3.2      // column height
+#define CO_R  0.38     // column radius
+// distances to each material; returns the scene SDF, sets `mat` (0 floor,
+// 1 column, 2 architrave, 3 focal sphere) at the nearest surface.
+float mapColonnade(vec3 p, float roz, float t, out int mat) {
+    float fl = p.y;                                       // floor
+    vec3  q  = p; q.z = mod(p.z + 0.5 * CO_PZ, CO_PZ) - 0.5 * CO_PZ;
+    float cL = sdCylinderY(vec3(p.x + CO_X, p.y - CO_H * 0.5, q.z), CO_R, CO_H * 0.5);
+    float cR = sdCylinderY(vec3(p.x - CO_X, p.y - CO_H * 0.5, q.z), CO_R, CO_H * 0.5);
+    float colmn = min(cL, cR);
+    float bh = 0.30;                                      // architrave half-height
+    float bL = sdBox2(vec2(p.x + CO_X, p.y - (CO_H + bh)), vec2(CO_R + 0.20, bh));
+    float bR = sdBox2(vec2(p.x - CO_X, p.y - (CO_H + bh)), vec2(CO_R + 0.20, bh));
+    float beam = min(bL, bR);
+    vec3  sc  = vec3(0.0, 1.7 + 0.18 * sin(t * 0.7), roz + 8.0);   // drifts with the camera
+    float sph = sdSphere(p - sc, 0.95);
+    float d = fl; mat = 0;
+    if (colmn < d) { d = colmn; mat = 1; }
+    if (beam  < d) { d = beam;  mat = 2; }
+    if (sph   < d) { d = sph;   mat = 3; }
+    return d;
+}
+float mapColD(vec3 p, float roz, float t) { int m; return mapColonnade(p, roz, t, m); }
+vec3 colNormal(vec3 p, float roz, float t) {
+    vec2 e = vec2(0.015, 0.0);
+    return normalize(vec3(mapColD(p + e.xyy, roz, t) - mapColD(p - e.xyy, roz, t),
+                          mapColD(p + e.yxy, roz, t) - mapColD(p - e.yxy, roz, t),
+                          mapColD(p + e.yyx, roz, t) - mapColD(p - e.yyx, roz, t)));
+}
+// the pastel sky + slitted "Floral Shoppe" sun (with chromatic-aberration
+// fringing), evaluated along a view ray. `sunMask` reports the sun's coverage.
+vec3 colSky(vec3 rd, float t, vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4, float mBass, out float sunMask) {
+    vec2  sky2 = rd.xy / max(rd.z, 0.12);                 // screen-like sky coordinate
+    float up   = clamp(rd.y * 1.4 + 0.25, 0.0, 1.0);
+    vec3  col  = mix(mix(c3, c4, 0.35), mix(c2, c1, 0.5), up);   // pink horizon -> lavender/teal
+    float cl   = fbm(vec2(sky2.x * 1.1 - t * 0.05, sky2.y * 1.4 + 2.0));
+    col = mix(col, mix(c4, c3, 0.5), smoothstep(0.55, 0.95, cl) * 0.18 * up);   // drifting clouds
+    vec2  sc = vec2(0.0, 0.16);
+    float Rs = 0.30 + 0.05 * mBass;                       // bass swells the sun
+    float sy   = clamp((sky2.y - (sc.y - Rs)) / (2.0 * Rs), 0.0, 1.0);
+    float slit = smoothstep(0.42, 0.50, fract(sy * 7.0));
+    float cut  = mix(1.0, slit, smoothstep(0.45, 1.0, sy));
+    float ca   = 0.008;
+    float mR = smoothstep(Rs, Rs - 0.05, length((sky2 - sc) - vec2(ca, 0.0))) * cut;
+    float mG = smoothstep(Rs, Rs - 0.05, length( sky2 - sc))                  * cut;
+    float mB = smoothstep(Rs, Rs - 0.05, length((sky2 - sc) + vec2(ca, 0.0))) * cut;
+    vec3 sunCol = mix(c3, c4, smoothstep(0.0, 0.55, 1.0 - sy));
+    col.r = mix(col.r, sunCol.r, mR);
+    col.g = mix(col.g, sunCol.g, mG);
+    col.b = mix(col.b, sunCol.b, mB);
+    float halo = exp(-length(sky2 - sc) * 3.8);
+    col += sunCol * halo * 0.22;
+    sunMask = max(max(max(mR, mG), mB), halo * 0.5);
+    return col;
+}
+// marble surface shade for columns / architrave / the iridescent focal sphere
+vec3 colSurface(vec3 pos, vec3 n, int mat, vec3 rd, float roz, float t,
+                vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4, float mBeat) {
+    vec3  sunDir = normalize(vec3(0.0, 0.25, 1.0));
+    vec3  marble = mix(mix(c3, c4, 0.4), vec3(1.0), 0.55);    // pale pinkish marble from palette
+    if (mat == 3) {
+        float sm; vec3 refl = colSky(reflect(rd, n), t, c0, c1, c2, c3, c4, 0.0, sm);
+        float fres = pow(1.0 - max(dot(-rd, n), 0.0), 2.5);
+        vec3  irid = 0.5 + 0.5 * cos(6.2831 * (n * 0.5 + vec3(0.0, 0.33, 0.66)));
+        irid = mix(irid, mix(c3, c4, 0.5), 0.5);             // tie the iridescence to the palette
+        return mix(refl, irid, 0.4) + fres * mix(c4, vec3(1.0), 0.5) * 0.6;
     }
-    return clamp(max(trunk, fronds), 0.0, 1.0);
+    // subtle marble veining (stretched fbm streaks) so the stone isn't flat fill
+    float vein = fbm(pos.xz * vec2(2.2, 6.0) + pos.y * 1.5);
+    marble *= 0.86 + 0.22 * smoothstep(0.35, 0.72, vein);
+    float dif = max(dot(n, sunDir), 0.0);
+    float sky = 0.5 + 0.5 * n.y;                             // hemispheric skylight
+    vec3  col = marble * (0.46 + 0.52 * dif + 0.30 * sky + 0.12 * max(-n.y, 0.0));  // +floor bounce
+    if (mat == 1) {
+        float zz  = mod(pos.z + 0.5 * CO_PZ, CO_PZ) - 0.5 * CO_PZ;
+        float lpx = (pos.x < 0.0 ? pos.x + CO_X : pos.x - CO_X) + 1e-5;
+        col *= 0.85 + 0.15 * cos(atan(zz, lpx) * 16.0);      // vertical fluting
+        col *= 0.55 + 0.45 * smoothstep(0.0, 0.7, pos.y / CO_H);  // ambient occlusion toward the base
+    }
+    col += mix(c3, c4, 0.5) * mBeat * 0.5;                   // a beat pulses warm light down the colonnade
+    return col;
+}
+vec3 colonnadeScene(vec2 pp, vec2 mp, float curGate, float t,
+                    vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4, vec4 mus, out float bright) {
+    float mBass = mus.x, mBeat = mus.w;
+    vec3 ro = vec3(0.0, 1.5, t * 1.6);
+    vec3 ta = ro + vec3(0.0, -0.05, 5.0);
+    vec3 fw = normalize(ta - ro);
+    vec3 rt = normalize(cross(vec3(0.0, 1.0, 0.0), fw));
+    vec3 uo = cross(fw, rt);
+    vec3 rd = normalize(fw * 1.6 + rt * pp.x * 1.6 - uo * pp.y * 1.6);
+    // cursor projected to the floor -> a warm spotlight pool (style-native)
+    vec3  crd = normalize(fw * 1.6 + rt * mp.x * 1.6 - uo * mp.y * 1.6);
+    float ct  = (crd.y < -0.01) ? -ro.y / crd.y : -1.0;
+    vec2  curFloor = (ct > 0.0) ? (ro + crd * ct).xz : vec2(1e4);
+
+    float dist = 0.0; int hit = 0, mat = 0; vec3 pos = ro;
+    for (int i = 0; i < 96; i++) {
+        pos = ro + rd * dist;
+        float dd = mapColonnade(pos, ro.z, t, mat);
+        if (dd < 0.0022 * dist + 0.001) { hit = 1; break; }
+        dist += dd * 0.9;
+        if (dist > 60.0) break;
+    }
+    vec3 col;
+    if (hit == 1) {
+        vec3 n = colNormal(pos, ro.z, t);
+        if (mat == 0) {
+            // glossy checkered marble floor: reflect the sky + a short surface march
+            vec3 gn = vec3(0.0, 1.0, 0.0);
+            vec3 rr = reflect(rd, gn);
+            float sm; vec3 refl = colSky(rr, t, c0, c1, c2, c3, c4, mBass, sm);
+            vec3 rp = pos + gn * 0.02; float rdist = 0.0; int rhit = 0, rmat = 0; vec3 rpos = rp;
+            for (int j = 0; j < 40; j++) {
+                rpos = rp + rr * rdist;
+                float dd = mapColonnade(rpos, ro.z, t, rmat);
+                if (dd < 0.004 * rdist + 0.002 && rmat != 0) { rhit = 1; break; }
+                rdist += dd * 0.9;
+                if (rdist > 30.0) break;
+            }
+            if (rhit == 1)
+                refl = colSurface(rpos, colNormal(rpos, ro.z, t), rmat, rr, ro.z, t, c0, c1, c2, c3, c4, mBeat);
+            float chk  = mod(floor(pos.x) + floor(pos.z), 2.0);
+            vec3  tile = mix(mix(c1, c2, 0.5), mix(mix(c3, c4, 0.4), vec3(1.0), 0.55), 0.45 + 0.4 * chk);
+            col = mix(tile * 0.5, refl, 0.62);
+            col += mix(c3, c4, 0.5) * exp(-abs(pos.x) * 1.2) * 0.18 * (1.0 + mBass);  // sun mirrored down the aisle
+        } else {
+            col = colSurface(pos, n, mat, rd, ro.z, t, c0, c1, c2, c3, c4, mBeat);
+        }
+        float sm; vec3 haze = colSky(rd, t, c0, c1, c2, c3, c4, mBass, sm);
+        col = mix(col, haze, 1.0 - exp(-dist * 0.045));      // dreamy pastel distance haze
+        if (curGate > 0.001) {                               // cursor spotlight pooled on the floor
+            float cd = length(pos.xz - curFloor);
+            col += mix(c4, vec3(1.0, 0.95, 0.9), 0.4) * exp(-cd * 1.3) * curGate * 0.45;
+        }
+    } else {
+        float sm; col = colSky(rd, t, c0, c1, c2, c3, c4, mBass, sm);
+    }
+    bright = clamp(dot(col, vec3(0.4)), 0.0, 1.0);
+    return col;
 }
 
-vec3 baseLook(int style, vec2 warpP, vec2 p, float t,
+vec3 baseLook(int style, vec2 warpP, vec2 p, vec2 mp, float curGate, float t,
               vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4,
               vec4 mus, out float shade)
 {
@@ -546,33 +755,77 @@ vec3 baseLook(int style, vec2 warpP, vec2 p, float t,
     }
 
     if (style == 5) {
-        // --- Laserwave: a neon perspective grid rushing to a vanishing point under a
-        //     banded retro sun, wrapped in synthwave ATMOSPHERE — a hot horizon haze
-        //     band where sky meets grid, a twinkling starfield + nebula in the deep
-        //     sky, the sun's glow mirrored down the grid, and faint CRT scanlines.
-        //     Palette stops only; pairs best with Laserwave/Outrun. shade = neon energy.
+        // --- Laserwave: a neon perspective grid riding a reflective WATER surface
+        //     under a banded retro sun. The water RIPPLES INTERACTIVELY — expanding
+        //     rings from the cursor, a music throb, and an ambient chop — and the sun
+        //     is mirrored in it as a ripple-shimmered reflection. Twinkling starfield
+        //     + nebula in the deep sky, faint CRT scanlines. shade = neon energy.
         const float HOR = -0.04;                          // horizon a touch above centre
         vec2  sc   = vec2(0.0, HOR - 0.22);               // sun centre, above horizon
         float Rs   = 0.22;
         vec3  col5;
         float shd;
-        if (p.y > HOR) {                                  // ---- neon floor grid ----
-            float d    = (p.y - HOR) + 0.012;             // depth (small near horizon)
-            float zl   = 0.16 / d + t * (1.6 + 1.2 * mBass);   // lines rush forward
-            float xl   = warpP.x / d * 1.1;               // radiate from the vanishing point
-            float w    = 0.085 + 0.06 * d;                // lines thicken with nearness
-            float gz   = smoothstep(w, 0.0, min(fract(zl), 1.0 - fract(zl)));
-            float gx   = smoothstep(w, 0.0, min(fract(xl), 1.0 - fract(xl)));
+        if (p.y > HOR) {                                  // ---- reflective WATER surface ----
+            float depth = (p.y - HOR);
+            // RIPPLE field — the interactive part: ambient chop + expanding rings from
+            // the cursor + a music throb. Scaled up near the viewer (lower in frame =
+            // closer water) so it reads as a receding surface, not a flat decal.
+            float amb    = 0.010 * sin((p.x * 5.0 + p.y * 16.0) - t * 1.5)
+                         + 0.008 * (fbm(vec2(p.x * 3.0, p.y * 7.0 - t * 0.4)) - 0.5);
+            float dC     = length(p - mp);
+            float curRip = sin(dC * 52.0 - t * 7.0) * exp(-dC * 4.5) * curGate * 0.022;
+            float musRip = sin(depth * 55.0 - t * 5.0) * (0.45 * mBeat + 0.25 * mLevel) * 0.020;
+            float rip    = (amb + curRip + musRip) / max(depth + 0.05, 0.06);
+            // neon wireframe grid riding the water, x displaced by the ripples
+            float drive = t * (1.6 + 1.2 * mBass);
+            // YAW: rotate the ground plane about the vertical axis at the vanishing
+            // point so the whole surface banks (window-drag drives uYaw, eased +
+            // spring-back in QML). (ax,az) are the world coords pre-1/d; rotate, then
+            // divide, so perspective stays correct. uYaw=0 → the original grid.
+            float cy = cos(uYaw), sy = sin(uYaw);
+            float ax = 1.1 * (warpP.x + rip);
+            float az = 0.16;
+            // --- 3-D rolling TERRAIN: the neon grid DRAPES over a smooth height field
+            //     that varies across BOTH the road's width and its length, so the
+            //     contour lines genuinely deform (horizontals curve, verticals bend)
+            //     instead of sliding on a flat plane. We sample the height at the FLAT
+            //     ground coords, then re-project depth (a raised point reads as farther/
+            //     higher), so the lines climb hills with correct perspective. Scrolls
+            //     toward the viewer with `drive`; uPitch swells it; uHill = strength.
+            float d0  = depth + 0.012;                       // flat depth
+            float xg  = (ax * cy - az * sy) / d0;            // flat ground coords (terrain domain)
+            float zg  = (ax * sy + az * cy) / d0 + drive;
+            float H   = sin(zg * 0.55 + xg * 0.45) * 0.55    // smooth low-freq hills, 2-D
+                      + sin(xg * 0.80 - zg * 0.30 + 1.7) * 0.30
+                      + sin(zg * 1.20 + xg * 0.25 + 4.0) * 0.15;
+            H        *= uHill * (0.85 + 0.35 * clamp(uPitch, -1.0, 1.0));
+            float hk  = 0.24 * smoothstep(0.0, 0.07, depth); // pin the skyline; full strength below it
+            float d   = max(d0 * (1.0 - clamp(H, -1.3, 1.3) * hk), 0.004);  // clamp so lines never fold
+            float xl   = (ax * cy - az * sy) / d;            // grid coords on the HILLY surface
+            float zl   = (ax * sy + az * cy) / d + drive;
+            float w    = 0.085 + 0.06 * d;
+            float wz   = w + 0.8 * fwidth(zl);            // anti-alias the dense lines toward the horizon
+            float wx   = w + 0.8 * fwidth(xl);
+            float gz   = smoothstep(wz, 0.0, min(fract(zl), 1.0 - fract(zl)));
+            float gx   = smoothstep(wx, 0.0, min(fract(xl), 1.0 - fract(xl)));
             float grid = max(gz, gx);
-            float fade = smoothstep(0.0, 0.06, p.y - HOR);    // dissolve into horizon haze
+            float fade = smoothstep(0.0, 0.06, depth);
             grid      *= fade;
-            vec3 floorBase = mix(c1, c0, clamp((p.y - HOR) * 1.6, 0.0, 1.0));
+            vec3 waterBase = mix(c1, c0, clamp(depth * 1.6, 0.0, 1.0));
             vec3 lineCol   = ramp(0.55 + 0.40 * grid, c0, c1, c2, c3, c4);
-            col5 = mix(floorBase, lineCol, grid);
-            // the sun's glow reflected straight down the grid (a luminous central aisle)
-            float refl = exp(-abs(warpP.x) * 2.6) * smoothstep(0.02, 0.5, p.y - HOR);
-            col5 += mix(c3, c4, 0.5) * refl * 0.18;
-            shd = max(grid * (1.0 + 0.4 * mBeat), refl * 0.5);
+            col5 = mix(waterBase, lineCol, grid);
+            // the sun MIRRORED in the water — a compressed, ripple-shimmered reflection
+            vec2  rp2   = vec2(p.x + rip * 7.0, HOR - depth * 0.6);
+            float rhalo = exp(-length(rp2 - sc) * 4.5);
+            col5 += mix(c4, c3, 0.4) * rhalo * 0.50 * fade * (1.0 + 0.4 * mBass);
+            // a luminous central aisle (sun glow straight down), rippling
+            float refl  = exp(-abs(warpP.x + rip * 4.0) * 2.6) * smoothstep(0.02, 0.5, depth);
+            col5 += mix(c3, c4, 0.5) * refl * 0.16;
+            // wet crest sparkle riding the ripples
+            col5 += mix(c3, c4, 0.5)
+                  * smoothstep(0.86, 1.0, sin(p.x * 30.0 + p.y * 90.0 - t * 3.0 + rip * 22.0) * 0.5 + 0.5)
+                  * fade * 0.10;
+            shd = max(max(grid * (1.0 + 0.4 * mBeat), refl * 0.6), rhalo * 0.6);
         } else {                                          // ---- sky + banded sun ----
             float up     = smoothstep(HOR, HOR - 0.8, p.y);   // 0 at horizon → 1 at top
             vec3  skyCol = mix(c1, c0, up);
@@ -605,87 +858,28 @@ vec3 baseLook(int style, vec2 warpP, vec2 p, float t,
     }
 
     if (style == 6) {
-        // --- Vaporwave: the iconic perspective CHECKERBOARD floor + reflection under
-        //     the slitted "Floral Shoppe" sun (with chromatic-aberration fringing); a
-        //     multi-stop PASTEL sky (warm pink horizon → cool lavender/teal top) with
-        //     drifting clouds and palm-tree silhouettes; finished with VHS scanlines, a
-        //     drifting tracking band, and a soft vignette. Pastel pink/teal sing on the
-        //     Vaporwave palette but it's palette-agnostic. shade = sun/floor/neon energy.
-        const float HOR = -0.02;
-        vec2  sc = vec2(0.0, HOR - 0.24);
-        float Rs = 0.26;
-        vec3  col6;
-        float shd;
-        if (p.y > HOR) {                                  // ---- checkerboard floor + reflection ----
-            float d   = (p.y - HOR) + 0.015;
-            float zl  = 0.16 / d + t * (0.9 + 0.6 * mBass);
-            float xl  = warpP.x / d * 1.1;
-            float chk = mod(floor(zl) + floor(xl), 2.0);  // 0/1 tiles
-            float ez  = smoothstep(0.10, 0.0, min(fract(zl), 1.0 - fract(zl)));
-            float ex  = smoothstep(0.10, 0.0, min(fract(xl), 1.0 - fract(xl)));
-            float seam = max(ez, ex);                     // a little glow on the tile seams
-            float fade = smoothstep(0.0, 0.07, p.y - HOR);
-            vec3 floorCol = mix(mix(c0, c1, 0.5), c2, chk);
-            vec3 seamCol  = ramp(0.7, c0, c1, c2, c3, c4);
-            floorCol = mix(floorCol, seamCol, seam * fade * 0.6);
-            float refl = exp(-abs(warpP.x) * 2.2) * smoothstep(0.0, 0.45, p.y - HOR);
-            floorCol += mix(c3, c4, 0.5) * refl * 0.22;   // sun mirrored down the centre aisle
-            col6 = floorCol;
-            shd  = max((0.3 + 0.4 * chk) * fade + seam * 0.4, refl * 0.6);
-        } else {                                          // ---- pastel sky + slitted CA sun + clouds + palms ----
-            float up = smoothstep(HOR, HOR - 0.85, p.y);  // 0 horizon → 1 top
-            // multi-stop pastel gradient: warm pink/peach at the horizon → cool lavender/teal up top
-            vec3 skyCol = mix(mix(c3, c4, 0.35), mix(c2, c1, 0.45), up);
-            float cl = fbm(vec2(p.x * 1.6 - t * 0.12, p.y * 3.0 + 2.0));   // drifting clouds
-            skyCol = mix(skyCol, mix(c4, c3, 0.5), smoothstep(0.55, 0.95, cl) * 0.20);
-            // Floral Shoppe sun: c3→c4 vertical gradient, horizontal slits in the lower
-            // half, with chromatic-aberration fringing (per-channel disc offset)
-            float sy   = clamp((p.y - (sc.y - Rs)) / (2.0 * Rs), 0.0, 1.0);
-            float slit = smoothstep(0.42, 0.50, fract(sy * 7.0));
-            float cut  = mix(1.0, slit, smoothstep(0.45, 1.0, sy));
-            float ca   = 0.007;
-            float mR = smoothstep(Rs, Rs - 0.05, length((p - sc) - vec2(ca, 0.0))) * cut;
-            float mG = smoothstep(Rs, Rs - 0.05, length( p - sc))                  * cut;
-            float mB = smoothstep(Rs, Rs - 0.05, length((p - sc) + vec2(ca, 0.0))) * cut;
-            vec3 sunCol = mix(c3, c4, smoothstep(0.0, 0.55, 1.0 - sy));
-            col6 = skyCol;
-            col6.r = mix(col6.r, sunCol.r, mR);
-            col6.g = mix(col6.g, sunCol.g, mG);
-            col6.b = mix(col6.b, sunCol.b, mB);
-            col6 += sunCol * exp(-length(p - sc) * 4.6) * 0.20;            // halo
-            // palm silhouettes flanking the sun on the horizon
-            float palm = max(palmAt(p, -0.66, HOR, 0.34), palmAt(p, 0.70, HOR, 0.30));
-            col6 = mix(col6, c0 * 0.5, palm);
-            shd = max(max(max(mR, mG), mB), palm * 0.15);
-        }
-        // ---- shared atmosphere ----
-        float hz = exp(-abs(p.y - HOR) * 7.0);             // hazy pastel horizon band
-        col6 += mix(c3, c4, 0.5) * hz * 0.22;
-        shd = max(shd, hz * 0.4);
+        // --- Vaporwave "Elysium": a raymarched endless pastel-marble COLONNADE
+        //     (colonnadeScene) — two rows of fluted columns under an architrave
+        //     receding to the slitted Floral-Shoppe sun, over a glossy checkered-
+        //     marble floor that mirrors the pastel sky, with an iridescent focal
+        //     sphere. Uses the UNWARPED point p (warping a 3-D camera reads as
+        //     wobble); cursor lights a floor spotlight, beat pulses the colonnade,
+        //     bass swells the sun. Finished with VHS scanlines + vignette.
+        vec3 col6 = colonnadeScene(p, mp, curGate, t, c0, c1, c2, c3, c4, mus, shade);
         col6 *= 1.0 - 0.05 * (0.5 + 0.5 * sin(p.y * 220.0));   // VHS scanlines
         float band = smoothstep(0.05, 0.0, abs(fract((p.y + 0.5) - t * 0.08) - 0.5));
-        col6 += mix(c3, c4, 0.5) * band * 0.05;            // drifting VHS tracking band
-        col6 *= 1.0 - 0.18 * dot(p, p);                    // soft vignette
-        shade = clamp(shd, 0.0, 1.0);
+        col6 += mix(c3, c4, 0.5) * band * 0.04;                // drifting VHS tracking band
+        col6 *= 1.0 - 0.16 * dot(p, p);                        // soft vignette
         return col6;
     }
 
     if (style == 7) {
-        // --- Cyberpunk: a raymarched 3D foggy neon city (cyberpunkScene) — real
-        //     perspective, volumetric distance-fog, emissive neon towers, a wet
-        //     reflective street, a hazy moon. Soft rain drifts over the top. Uses the
-        //     UNWARPED point p (warping a 3D camera reads as wobble). Palette only.
-        float bsc;
-        vec3  col7 = cyberpunkScene(p, t, c0, c1, c2, c3, c4, bsc);
-        // soft rain over everything
-        float rcol = floor(p.x * 130.0);
-        float ry   = fract(p.y * 1.6 + t * (3.0 + 2.0 * hash(vec2(rcol, 4.0))) * 7.0
-                           + hash(vec2(rcol, 8.0)) * 10.0);
-        float rain = smoothstep(0.0, 0.02, ry) * smoothstep(0.12, 0.02, ry)
-                     * step(0.66, hash(vec2(rcol, 1.0))) * 0.22;
-        col7 += mix(c3, c4, 0.4) * rain;
-        shade = clamp(max(bsc * 0.5, rain * 0.3), 0.0, 1.0);
-        return col7;
+        // --- Cyberpunk "Datascape": a raymarched Tron-style neon DATA GRID
+        //     (datascapeScene) — a glowing grid floor with data packets racing
+        //     along the lines, edge-lit data-blocks, and a neon horizon glow.
+        //     Clean/digital, not foggy. Uses the UNWARPED point p; cursor lights
+        //     the floor traces, beat ripples the grid, bass lifts the blocks.
+        return datascapeScene(p, mp, curGate, t, c0, c1, c2, c3, c4, mus, shade);
     }
 
     // --- style 0 (default) Flow: domain-warped fbm ribbons that genuinely FLOW
@@ -830,7 +1024,10 @@ void main() {
     float exc = rx.r;
     vec2  exGrad = vec2(texture(reactTex, ruv + vec2(rpx.x, 0.0)).r - texture(reactTex, ruv - vec2(rpx.x, 0.0)).r,
                         texture(reactTex, ruv + vec2(0.0, rpx.y)).r - texture(reactTex, ruv - vec2(0.0, rpx.y)).r);
-    warpP += exGrad * (0.5 + 0.5 * energy);
+    // neon "scene" styles get a stronger flow-displacement so the reaction shows by
+    // MOVING their (bright) imagery near the cursor, where an additive glow can't show
+    float dgain = (uStyle == 6) ? 3.2 : ((uStyle == 5 || uStyle == 7) ? 1.8 : 1.0);
+    warpP += exGrad * (0.5 + 0.5 * energy) * dgain;
 
     vec3 c0, c1, c2, c3, c4;
     palette(uTheme, c0, c1, c2, c3, c4);
@@ -870,7 +1067,7 @@ void main() {
     //      the colour and a 0..1 `shade` (where the aurora is bright) that the
     //      shared reactive light below rides. Everything after here is shared.
     float shade;
-    vec3 col = baseLook(uStyle, warpP, p, t, c0, c1, c2, c3, c4, mus, shade);
+    vec3 col = baseLook(uStyle, warpP, p, mp, curGate, t, c0, c1, c2, c3, c4, mus, shade);
 
     // depth: in dark mode darken troughs for contrast; in light mode keep it airy
     col *= mix(0.97, 0.86, uDark) + mix(0.10, 0.26, uDark) * shade;
@@ -926,12 +1123,35 @@ void main() {
     //      wakes from react.frag, drawn in the same accent palette so they read as
     //      the aurora's own light. This is the "wow" layer — it flows on AFTER the
     //      cursor stops, beats ripple outward, and window wakes drift and fade.
-    light += mix(accentWarm, accentCool, 0.4) * exc * (0.30 + 0.30 * shade);
-    light += accentCool * rx.b * 0.5;          // expanding beat ripple ring
-    col   *= 1.0 + rx.g * 0.7;                  // music level/bass throb swells the field
+    // The neon "scene" styles (Laserwave 5, Vaporwave 6, Cyberpunk 7) draw bright,
+    // busy imagery that visually swamps a soft additive glow — and the screen-blend
+    // below suppresses light where the scene is already bright. Give them a stronger
+    // reactive gain so the cursor/beat reads as clearly as on the soft styles.
+    float rgain = (uStyle == 6) ? 2.4 : ((uStyle == 5 || uStyle == 7) ? 1.8 : 1.0);
+    light += mix(accentWarm, accentCool, 0.4) * exc * (0.30 + 0.30 * shade) * rgain;
+    light += accentCool * rx.b * 0.5 * rgain;   // expanding beat ripple ring
+    col   *= 1.0 + rx.g * 0.7;                   // music level/bass throb swells the field
+
+    // Hue-preserving highlight guard. The reactive feedback `exc` accumulates in
+    // react.frag (decay ~0.95, clamped to 8), so a DWELLING dragged window builds a
+    // large value; multiplied by rgain it over-drives `light` far past 1, and the
+    // screen-blend below then clips every channel to 1.0 — a WHITE blob that swamps
+    // the accent tint. Scale the whole additive field down by its own peak channel
+    // so an over-driven reaction saturates toward its accent COLOUR (channel ratios
+    // held) instead of going white. A no-op below 1.0 — ordinary cursor/beat glows
+    // (which sit well under 1) are untouched; only the blow-out case is reined in.
+    light *= 1.0 / max(max(max(light.r, light.g), light.b), 1.0);
 
     // screen-blend the shared light so layered responses combine gracefully
     col = col + light * (1.0 - col);
+    // Tint toward the accent at the excitation — the only reactive lever that shows on
+    // BRIGHT scenes (additive glow is screen-blend-suppressed; warp does nothing for a
+    // style that draws from p). Vaporwave (6) is bright pastel AND warp-independent, so
+    // it leans entirely on this: push it hard, toward the saturated cool accent so it
+    // reads against the pastel.
+    vec3  rtint   = (uStyle == 6) ? accentCool : accentWarm;
+    float tintAmt = clamp(exc, 0.0, 1.0) * ((uStyle == 6) ? 0.55 : 0.22 * (rgain - 1.0));
+    col = mix(col, rtint, tintAmt);
 
     // intensity: scale saturation around luma (1 = unchanged, 0 = greyscale)
     float luma = dot(col, vec3(0.299, 0.587, 0.114));

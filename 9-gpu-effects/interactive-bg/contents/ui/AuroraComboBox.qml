@@ -14,6 +14,7 @@
  */
 import QtQuick
 import QtQuick.Controls as QQC2
+import QtQuick.Layouts
 import QtQuick.Effects
 import org.kde.kirigami as Kirigami
 
@@ -22,21 +23,43 @@ QQC2.ComboBox {
 
     property color accentColor: Kirigami.Theme.highlightColor
 
+    // Optional per-row colour previews. `swatches[i]` is an array of colours for
+    // item i (or null/undefined for none) — when set, a gradient chip renders in
+    // the field and each dropdown row so the palette is VISIBLE, not just named.
+    // Leave empty (the default) and the box behaves like a plain text ComboBox.
+    property var swatches: []
+    function swatchFor(i) {
+        return (swatches && i >= 0 && i < swatches.length && swatches[i]) ? swatches[i] : null
+    }
+    readonly property bool hasSwatches: swatches && swatches.length > 0
+
     implicitHeight: Kirigami.Units.gridUnit * 1.8
-    implicitWidth: Kirigami.Units.gridUnit * 9
+    // widen when chips are shown so the name still fits beside the swatch
+    implicitWidth: hasSwatches ? Kirigami.Units.gridUnit * 11 : Kirigami.Units.gridUnit * 9
     leftPadding: Kirigami.Units.largeSpacing
     rightPadding: Kirigami.Units.gridUnit * 1.9
 
     // engaged = hovered / keyboard-focused / popup open
     readonly property bool active: hovered || visualFocus || popup.visible
 
-    // ---- selected-value label -----------------------------------------------
-    contentItem: QQC2.Label {
-        text: control.displayText
-        color: Kirigami.Theme.textColor
-        font: control.font
-        verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
+    // ---- selected-value label (+ optional palette chip) ---------------------
+    contentItem: RowLayout {
+        spacing: Kirigami.Units.smallSpacing
+        AuroraSwatch {
+            visible: control.swatchFor(control.currentIndex) !== null
+            colors: control.swatchFor(control.currentIndex) || []
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 2.0
+            Layout.preferredHeight: Kirigami.Units.gridUnit * 0.95
+            Layout.alignment: Qt.AlignVCenter
+        }
+        QQC2.Label {
+            text: control.displayText
+            color: Kirigami.Theme.textColor
+            font: control.font
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+            Layout.fillWidth: true
+        }
     }
 
     // ---- chevron -------------------------------------------------------------
@@ -152,11 +175,22 @@ QQC2.ComboBox {
         text: itemDelegate.modelData
         highlighted: control.highlightedIndex === index
 
-        contentItem: QQC2.Label {
-            text: itemDelegate.text
-            color: itemDelegate.highlighted ? control.accentColor : Kirigami.Theme.textColor
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
+        contentItem: RowLayout {
+            spacing: Kirigami.Units.smallSpacing
+            AuroraSwatch {
+                visible: control.swatchFor(itemDelegate.index) !== null
+                colors: control.swatchFor(itemDelegate.index) || []
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 2.4
+                Layout.preferredHeight: Kirigami.Units.gridUnit * 1.0
+                Layout.alignment: Qt.AlignVCenter
+            }
+            QQC2.Label {
+                text: itemDelegate.text
+                color: itemDelegate.highlighted ? control.accentColor : Kirigami.Theme.textColor
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
         }
 
         background: Rectangle {

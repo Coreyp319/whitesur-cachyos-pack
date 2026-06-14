@@ -34,6 +34,9 @@ def adapt(src: str) -> str:
     src = src.replace("#version 440", "#version 330 core")
     src = re.sub(r"layout\(location = 0\)\s+in\s+vec2\s+qt_TexCoord0;", "in vec2 qt_TexCoord0;", src)
     src = re.sub(r"layout\(location = 0\)\s+out\s+vec4\s+fragColor;", "out vec4 fragColor;", src)
+    # GL 3.3 core rejects layout(binding=N) on samplers (needs 4.2); the renderer
+    # binds no texture anyway, so texture(reactTex,...) reads 0 = no reactivity.
+    src = re.sub(r"layout\(binding = \d+\)\s+uniform\s+sampler2D", "uniform sampler2D", src)
     # convert the std140 UBO block into individual uniforms
     m = re.search(r"layout\(std140, binding = 0\) uniform buf \{(.*?)\n\};", src, re.S)
     block = m.group(1)
@@ -79,6 +82,10 @@ def render(ctx, prog, vao, fbo, style, theme, dark, t, speed=1.0):
     for n in ["uWinReact","uActiveMove","uMusicReact","uBass","uMid","uTreble","uLevel","uBeat"]:
         setu(n, 0.0)
     setu("uWinCount", 0)
+    # ground-plane controls (env-driven so the Laserwave yaw/pitch/hills can be previewed)
+    setu("uYaw",   float(os.environ.get("UYAW",   "0")))
+    setu("uPitch", float(os.environ.get("UPITCH", "0")))
+    setu("uHill",  float(os.environ.get("UHILL",  "0")))
     vao.render(moderngl.TRIANGLE_STRIP)
     data = fbo.read(components=3, dtype='f1')
     img = np.frombuffer(data, dtype=np.uint8).reshape(H, W, 3)

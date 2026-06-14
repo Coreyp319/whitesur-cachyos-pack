@@ -53,6 +53,56 @@ WallpaperItem {
     // Reduce-motion: honour KDE's "Animation speed = Instant"
     // (AnimationDurationFactor 0) by freezing the drift. Same cheap poll cadence.
     property bool reduceMotion: false
+
+    // --- surface yaw: a window-drag banks the Laserwave ground plane, lagging the
+    //     drag and spring-winding back to neutral. Driven by the window bridge's
+    //     active-window velocity (uActiveVel.x), through a damped SpringAnimation
+    //     (the lag + overshoot + wind-back). Gated by reduce-motion.
+    readonly property real yawDrive: reduceMotion ? 0.0
+        : Math.max(-0.32, Math.min(0.32, -aurora.uActiveVel.x * 7.0))
+    readonly property bool yawDragging: aurora.uActiveMove > 0.15
+    property real yaw: yawDragging ? yawDrive : 0.0
+    // asymmetric: quick to follow the drag (slight lag); ~6x slower, gentle wind-back to neutral
+    Behavior on yaw { NumberAnimation { duration: root.yawDragging ? 110 : 2800
+                                        easing.type: root.yawDragging ? Easing.OutCubic : Easing.OutSine } }
+
+    // --- car steering: the Laserwave hero car orients toward the cursor in full
+    //     3-D — yaw from pointer-X, pitch from pointer-Y — with a window-drag
+    //     velocity impulse added on top, so it reacts to BOTH the pointer (always
+    //     on, over the desktop) and dragged windows, every combination. Normalised
+    //     to -1..1 per axis; 0 = neutral (the centre cell of the pose atlas). The
+    //     target springs back to neutral when the pointer leaves/idles or under
+    //     reduce-motion; carYaw/carPitch spring toward it so the car banks with
+    //     weight and settles instead of snapping.
+    readonly property real steerTargetX: reduceMotion ? 0.0 : Math.max(-1.0, Math.min(1.0,
+          (root.pMouseActive > 0.01 ? (root.pMouseX - 0.5) * 2.0 : 0.0)
+        + (root.yawDragging ? -aurora.uActiveVel.x * 6.0 : 0.0)))
+    readonly property real steerTargetY: reduceMotion ? 0.0 : Math.max(-1.0, Math.min(1.0,
+          (root.pMouseActive > 0.01 ? (0.5 - root.pMouseY) * 2.0 : 0.0)
+        + (root.yawDragging ? -aurora.uActiveVel.y * 6.0 : 0.0)))
+    property real carYaw:   0.0
+    property real carPitch: 0.0
+    readonly property bool carSteering: (pMouseActive > 0.01) || yawDragging
+    // Frame-driven exponential smoothing — a low-pass that DEBOUNCES cursor jitter
+    // into one continuous glide (no per-event re-targeting steps, which read as
+    // micro-stutter when sweeping across). Snappy time-constant while steering; a
+    // long, gentle wind-back to neutral (the "coast over a quarter-mile of road"
+    // feel) once the pointer leaves. Snaps within epsilon so a settled car stops
+    // repainting. Gated to the Laserwave style (only the car uses it).
+    Connections {
+        target: clock
+        enabled: root.cfgStyle === 5
+        function onTriggered() {
+            var dt  = clock.frameTime
+            if (!(dt > 0.0)) dt = 0.016                      // guard a 0/NaN first frame (~60fps)
+            dt = Math.min(dt, 0.05)                          // clamp against frame hitches
+            var tau = root.carSteering ? 0.11 : 1.9          // smaller = snappier; large = long coast-back
+            var k   = 1.0 - Math.exp(-dt / tau)
+            var tx  = root.steerTargetX, ty = root.steerTargetY
+            root.carYaw   = (Math.abs(tx - root.carYaw)   < 0.0006) ? tx : root.carYaw   + (tx - root.carYaw)   * k
+            root.carPitch = (Math.abs(ty - root.carPitch) < 0.0006) ? ty : root.carPitch + (ty - root.carPitch) * k
+        }
+    }
     P5Support.DataSource {
         id: motionProbe
         engine: "executable"
@@ -211,6 +261,13 @@ WallpaperItem {
         running: true
     }
 
+    // sceneRoot = everything the bloom pass captures: the aurora field + the hero.
+    // It's hidden from direct rendering (sceneSrc hideSource) and drawn — bloomed —
+    // by bloomComposite below.
+    Item {
+    id: sceneRoot
+    anchors.fill: parent
+
     ShaderEffect {
         id: aurora
         anchors.fill: parent
@@ -223,21 +280,33 @@ WallpaperItem {
 
         property real     iTime: clock.elapsedTime
         property vector2d iResolution: Qt.vector2d(width, height)
+        // Speed/Vividness ease when nudged in the config (matching the uDark ease),
+        // so a slider change glides instead of snapping. Gated by reduceMotion so
+        // KDE "Animation = Instant" still applies instantly. Theme/Style stay a hard
+        // cut (rare, "set once" choices — a cross-dissolve there isn't worth 2× cost).
         property real     uSpeed: root.reduceMotion ? 0.0 : root.cfgSpeed
+        Behavior on uSpeed { enabled: !root.reduceMotion; NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
         property real     uInteractivity: root.cfgInteractivity
         property real     uIntensity: root.cfgIntensity
+        Behavior on uIntensity { enabled: !root.reduceMotion; NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
         property int      uTheme: root.cfgTheme
         property int      uStyle: root.cfgStyle
         // eased so the dock light/dark toggle cross-fades instead of snapping
         property real     uDark: root.uDark
         Behavior on uDark { NumberAnimation { duration: 700; easing.type: Easing.InOutCubic } }
 
-        // custom palette (consumed by the shader only when uTheme == 3)
+        // custom palette (consumed by the shader only when uTheme == 3). Eased so
+        // editing a stop recolours smoothly instead of jumping (same reduceMotion gate).
         property color    uColor0: root.configuration.Color0 ?? "#0d0f29"
         property color    uColor1: root.configuration.Color1 ?? "#1c2e73"
         property color    uColor2: root.configuration.Color2 ?? "#4552b8"
         property color    uColor3: root.configuration.Color3 ?? "#8f5cb8"
         property color    uColor4: root.configuration.Color4 ?? "#fa8c73"
+        Behavior on uColor0 { enabled: !root.reduceMotion; ColorAnimation { duration: 500; easing.type: Easing.InOutCubic } }
+        Behavior on uColor1 { enabled: !root.reduceMotion; ColorAnimation { duration: 500; easing.type: Easing.InOutCubic } }
+        Behavior on uColor2 { enabled: !root.reduceMotion; ColorAnimation { duration: 500; easing.type: Easing.InOutCubic } }
+        Behavior on uColor3 { enabled: !root.reduceMotion; ColorAnimation { duration: 500; easing.type: Easing.InOutCubic } }
+        Behavior on uColor4 { enabled: !root.reduceMotion; ColorAnimation { duration: 500; easing.type: Easing.InOutCubic } }
 
         // window reactivity (fed by pollWindows/applyWindows above). Rects are
         // normalised to this screen; the wake fades via the eased uActiveMove so
@@ -263,6 +332,13 @@ WallpaperItem {
         property real     uTreble: 0.0
         property real     uLevel: 0.0
         property real     uBeat: 0.0
+        // window-drag surface yaw (eased + spring-back) + a gentle bank from the
+        // car's steer, so the neon ground plane leans WITH the car as it turns.
+        property real     uYaw: root.yaw + root.carYaw * 0.08
+        // the Laserwave ground morphs into rolling hills; the car's pitch (cursor-Y)
+        // deepens them, so nosing up reads as cresting. uHill = base strength.
+        property real     uPitch: root.carPitch
+        property real     uHill: 1.0
         Behavior on uBass   { NumberAnimation { duration: 90;  easing.type: Easing.OutQuad } }
         Behavior on uMid    { NumberAnimation { duration: 90;  easing.type: Easing.OutQuad } }
         Behavior on uTreble { NumberAnimation { duration: 70;  easing.type: Easing.OutQuad } }
@@ -276,6 +352,153 @@ WallpaperItem {
         Behavior on iMouseX      { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
         Behavior on iMouseY      { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
         Behavior on iMouseActive { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
+    }
+
+    // Blender-authored hero (turntable sprite) — a neon "core" composited over
+    // the neon styles as a hovering, slowly-rotating billboard. Inside sceneRoot
+    // so the bloom pass glows it too. Shown only on Laserwave (5) + Datascape (7);
+    // beat-pulses, bobs gently (frozen under reduce-motion), and fades on/off.
+    Item {
+        id: heroGroup
+        readonly property bool show: root.cfgStyle === 7   // Datascape; Laserwave has its own assets
+        visible: opacity > 0.01
+        opacity: show ? 1.0 : 0.0
+        Behavior on opacity { NumberAnimation { duration: 500; easing.type: Easing.InOutCubic } }
+        transformOrigin: Item.Center
+
+        readonly property real heroSize: Math.min(root.width, root.height) * 0.42
+        width: heroSize; height: heroSize
+        x: (root.width - width) / 2
+        property real phase: 0
+        NumberAnimation on phase {
+            running: heroGroup.show && !root.reduceMotion
+            from: 0; to: 2 * Math.PI; duration: 6000; loops: Animation.Infinite
+        }
+        y: root.height * (root.cfgStyle === 5 ? 0.10 : 0.14) + root.height * 0.012 * Math.sin(phase)
+        scale: 1.0 + 0.10 * aurora.uBeat
+        Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+
+        AnimatedSprite {
+            id: heroSprite
+            anchors.fill: parent
+            source: Qt.resolvedUrl("../assets/hero_core.png")
+            frameCount: 16; frameWidth: 384; frameHeight: 384
+            frameRate: 5
+            running: heroGroup.show && !root.reduceMotion
+            loops: AnimatedSprite.Infinite
+            interpolate: false
+            smooth: true
+        }
+    }
+    }  // end sceneRoot
+
+    // --- bloom: capture sceneRoot (aurora + hero) and add a soft neon glow -----
+    // The biggest 'rendered vs flat' lever. sceneSrc captures the hidden scene as a
+    // texture (same provider pattern as reactBuf); bloomComposite adds a bright-pass
+    // glow over it. Lighter in light mode; paused + hidden on the Liquid style.
+    ShaderEffectSource {
+        id: sceneSrc
+        sourceItem: sceneRoot
+        hideSource: true
+        live: !root.liquid
+    }
+    ShaderEffect {
+        id: bloomComposite
+        anchors.fill: parent
+        visible: !root.liquid
+        property variant src: sceneSrc
+        property vector2d iResolution: Qt.vector2d(width, height)
+        // Laserwave (5) has a big bright sun + composited assets, so it blooms gently;
+        // the dark neon Datascape/others can take a stronger glow. Lighter in light mode.
+        property real uThreshold: root.cfgStyle === 5 ? 0.66 : 0.50
+        property real uIntensity: (root.cfgStyle === 5 ? 0.38 : 0.70)
+                                + (root.cfgStyle === 5 ? 0.22 : 0.60) * root.uDark
+        property real uRadius: Math.max(8.0, height * 0.045)
+        fragmentShader: Qt.resolvedUrl("../shaders/bloom.frag.qsb")
+    }
+
+    // --- Laserwave hero: the OutRun car, full-3-D reactive (ON TOP of the bloom) -
+    // A real car (Sketchfab "Cheetah '84" by DanielZhabotinsky, CC-BY) baked HDRI-lit
+    // in Blender into a 9×5 YAW×PITCH pose ATLAS (car_grid.png). frameselect.frag
+    // bilinearly blends the four neighbouring cells for the car's continuous, spring-
+    // eased orientation (root.carYaw / root.carPitch) so it genuinely TURNS and
+    // PITCHES in 3-D — tracking the cursor and reacting to window-drags, every
+    // combination — instead of snapping between frames. A faint mirrored copy below
+    // reads as a wet-grid reflection that grounds it.
+    // OUTSIDE sceneRoot — drawn over the bloom, NOT captured by it (a child driven by
+    // these uniforms does not update through the ShaderEffectSource). Style 5 only;
+    // HDRI-lit, so it needs no procedural bloom.
+    Item {
+        id: laserwaveLayer
+        anchors.fill: parent
+        visible: opacity > 0.01
+        opacity: root.cfgStyle === 5 ? 1.0 : 0.0
+        Behavior on opacity { NumberAnimation { duration: 500; easing.type: Easing.InOutCubic } }
+
+        readonly property int  cols: 9        // yaw columns in the atlas (left↔right)
+        readonly property int  rows: 5        // pitch rows (nose up↕down)
+        // continuous cell coords from the eased orientation (-1..1 per axis):
+        //   carYaw  +1 (cursor right) -> last column ; -1 -> first
+        //   carPitch +1 (cursor up)   -> top row (nose-up pose) ; -1 -> bottom row
+        readonly property real cellCol: (root.carYaw * 0.5 + 0.5) * (cols - 1)
+        readonly property real cellRow: (0.5 - root.carPitch * 0.5) * (rows - 1)
+        readonly property real carW: root.width * 0.21
+        readonly property real carH: carW * 254.0 / 429.0     // atlas cell aspect (level rear chase view + glow pad)
+        readonly property real driftY: root.reduceMotion ? 0.0 : Math.sin(clock.elapsedTime * 0.6) * 0.005 * root.height
+        readonly property real carX: root.width * 0.50 - carW / 2 + root.carYaw * root.width * 0.05
+        readonly property real carY: root.height * 0.62 - carH / 2 + driftY - root.carPitch * root.height * 0.018
+
+        Image { id: carSheet; source: Qt.resolvedUrl("../assets/laserwave/car_grid.png"); visible: false }
+
+        // neon contact-glow pool under the car (replaces the baked Blender plane):
+        // theme-coloured, beat-pulsed, follows the car's lateral slide. Drawn first,
+        // so the reflection and car sit on top of it.
+        ShaderEffect {
+            id: carUnderglow
+            width: laserwaveLayer.carW * 1.15
+            height: laserwaveLayer.carH * 0.60
+            x: laserwaveLayer.carX + laserwaveLayer.carW / 2 - width / 2
+            y: laserwaveLayer.carY + laserwaveLayer.carH * 0.55
+            property color uColorA: "#22e0ff"     // cyan core — complements the pink tail-lights & red body
+            property color uColorB: "#5a2a9e"     // violet rim
+            property real  uIntensity: 0.42 + 0.30 * aurora.uBeat
+            fragmentShader: Qt.resolvedUrl("../shaders/underglow.frag.qsb")
+        }
+
+        // wet-grid reflection: a foreshortened, mirrored, dim copy under the wheels.
+        ShaderEffect {
+            id: carReflection
+            width: laserwaveLayer.carW; height: laserwaveLayer.carH
+            x: laserwaveLayer.carX
+            y: laserwaveLayer.carY + height * 0.88
+            opacity: 0.20
+            transform: Scale { origin.x: carReflection.width / 2; origin.y: 0; yScale: -0.82 }
+            property variant src: carSheet
+            property real uCol: laserwaveLayer.cellCol
+            property real uRow: laserwaveLayer.cellRow
+            property real uCols: laserwaveLayer.cols
+            property real uRows: laserwaveLayer.rows
+            property real uBlend: 1.0
+            fragmentShader: Qt.resolvedUrl("../shaders/frameselect.frag.qsb")
+        }
+
+        // the car — bilinear cell blend gives a smooth 3-D turn/pitch; a subtle
+        // bank-into-the-steer roll and a beat-synced pop add life.
+        ShaderEffect {
+            id: heroCar
+            width: laserwaveLayer.carW; height: laserwaveLayer.carH
+            x: laserwaveLayer.carX; y: laserwaveLayer.carY
+            transformOrigin: Item.Center
+            rotation: root.carYaw * 3.0
+            scale: 1.0 + 0.05 * aurora.uBeat
+            property variant src: carSheet
+            property real uCol: laserwaveLayer.cellCol
+            property real uRow: laserwaveLayer.cellRow
+            property real uCols: laserwaveLayer.cols
+            property real uRows: laserwaveLayer.rows
+            property real uBlend: 1.0
+            fragmentShader: Qt.resolvedUrl("../shaders/frameselect.frag.qsb")
+        }
     }
 
     // --- reactive feedback field ------------------------------------------
@@ -339,6 +562,15 @@ WallpaperItem {
             uColor2: root.configuration.Color2 ?? "#4552b8"
             uColor3: root.configuration.Color3 ?? "#8f5cb8"
             uColor4: root.configuration.Color4 ?? "#fa8c73"
+            // ease Vividness/Speed/colours on the Liquid style too (reduceMotion-gated),
+            // so the tween matches the single-pass styles instead of snapping here.
+            Behavior on uIntensity { enabled: !root.reduceMotion; NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
+            Behavior on uSpeed     { enabled: !root.reduceMotion; NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
+            Behavior on uColor0 { enabled: !root.reduceMotion; ColorAnimation { duration: 500; easing.type: Easing.InOutCubic } }
+            Behavior on uColor1 { enabled: !root.reduceMotion; ColorAnimation { duration: 500; easing.type: Easing.InOutCubic } }
+            Behavior on uColor2 { enabled: !root.reduceMotion; ColorAnimation { duration: 500; easing.type: Easing.InOutCubic } }
+            Behavior on uColor3 { enabled: !root.reduceMotion; ColorAnimation { duration: 500; easing.type: Easing.InOutCubic } }
+            Behavior on uColor4 { enabled: !root.reduceMotion; ColorAnimation { duration: 500; easing.type: Easing.InOutCubic } }
             // music + window reactivity (aurora holds the live bridge values even
             // while hidden — its polling timers run regardless of style)
             uMusicReact: aurora.uMusicReact
